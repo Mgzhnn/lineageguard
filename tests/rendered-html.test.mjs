@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdir } from "node:fs/promises";
 import test from "node:test";
 
 async function render(pathname = "/", init = {}) {
@@ -25,6 +26,32 @@ async function render(pathname = "/", init = {}) {
     },
   );
 }
+
+test("production static cache resolves hashed assets by URL path", async () => {
+  // Regression: on Windows, vinext 0.0.50 keyed the static cache with
+  // path.relative() backslashes ("/assets\\x.css"), so every built asset
+  // 404ed from `vinext start` and pages rendered unstyled. The committed
+  // patch normalizes keys to URL separators; this test fails if that patch
+  // is ever lost (e.g. a vinext upgrade without the fix).
+  const cacheModuleUrl = new URL(
+    "../node_modules/vinext/dist/server/static-file-cache.js",
+    import.meta.url,
+  );
+  const { StaticFileCache } = await import(cacheModuleUrl.href);
+  const clientDir = new URL("../dist/client/", import.meta.url);
+  const assetNames = await readdir(new URL("assets/", clientDir));
+  const cssName = assetNames.find((name) => name.endsWith(".css"));
+  assert.ok(cssName, "expected a built CSS asset in dist/client/assets");
+
+  const cache = await StaticFileCache.create(
+    decodeURIComponent(clientDir.pathname.replace(/^\/([A-Za-z]:)/, "$1")),
+  );
+  const entry = cache.lookup(`/assets/${cssName}`);
+  assert.ok(
+    entry,
+    `static cache must resolve /assets/${cssName} via URL-style lookup`,
+  );
+});
 
 test("server-renders the LineageGuard workspace", async () => {
   const response = await render();
