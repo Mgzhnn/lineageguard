@@ -24,6 +24,7 @@ export async function GET() {
       "idempotent-handoffs-and-tools",
       "custom-rule-extensions",
       "sha256-run-fingerprint",
+      "otlp-json-sdk-adapter",
       "handoff-gate",
       "stateless-evaluate-api",
       "tenant-authenticated-api",

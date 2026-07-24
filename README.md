@@ -5,12 +5,13 @@ agent handoffs. It records what each agent received and produced, finds the
 first handoff where evidence, meaning, or authority changed, shows the
 downstream blast radius, and prepares the smallest safe retry.
 
-It is one product with four usable surfaces:
+It is one product with five usable surfaces:
 
 - a resumable runtime supervisor that blocks unsafe handoffs before downstream
   agents run;
 - a host-owned tool registry with scoped, one-time approvals and idempotency;
 - chain and branch/merge DAG analyzers;
+- a dependency-free OTLP/JSON adapter for OpenTelemetry GenAI spans;
 - a visual forensic workspace and framework-neutral HTTP/JSON adapter.
 
 No model API, account, database, analytics service, or paid service is required
@@ -52,10 +53,16 @@ pnpm dev
 Open the local URL printed in the terminal. The repository includes planted
 clinical, customer-support, and clean-chain examples.
 
+To embed the SDK in another TypeScript or JavaScript agent runtime:
+
+```bash
+pnpm add lineageguard
+```
+
 ## Instrument an agent runtime
 
 ```ts
-import { LineageGuardSession } from "@lineageguard/sdk";
+import { LineageGuardSession } from "lineageguard";
 
 const guard = new LineageGuardSession({
   runName: "Customer support run",
@@ -132,10 +139,38 @@ const report = new LineageGuardGraphRun()
 Per-parent claim projections prevent a merge from comparing unrelated
 documents as though they were one linear rewrite.
 
+## Import OpenTelemetry agent traces
+
+The dependency-free OTLP adapter accepts the standard OTLP/JSON
+`resourceSpans -> scopeSpans -> spans` shape. It reads
+`gen_ai.input.messages` and `gen_ai.output.messages`, understands structured
+OTLP `AnyValue` content, follows parent spans and same-trace links, and converts
+the selected trace to the same validated DAG used everywhere else:
+
+```ts
+import { runOtlpReliabilityPipeline } from "lineageguard/otel";
+
+const report = runOtlpReliabilityPipeline(otlpJson, {
+  traceId,
+  guardrail: "Preserve uncertainty. Approval before publishing.",
+});
+
+if (report.firstBlockingEdgeId) {
+  stopWorkflow(report.recovery);
+}
+```
+
+Root model spans must contain `gen_ai.input.messages`,
+`lineageguard.source`, or an explicit `sourceText` option. The adapter fails
+closed rather than treating a model output as authoritative evidence. GenAI
+content attributes can contain sensitive data; keep collection and retention
+under the host system's privacy policy.
+
 Run the dependency-free reference workflow:
 
 ```bash
 pnpm demo:agent
+pnpm demo:otel
 ```
 
 It attempts to send an email, LineageGuard blocks the tool before execution,
@@ -201,13 +236,13 @@ See [docs/trace-contract.md](./docs/trace-contract.md) for validation rules.
 ## Test and build
 
 ```bash
-pnpm test
-pnpm lint
+pnpm run verify
 ```
 
-`pnpm test` runs detector, pipeline, runtime enforcement, SDK, schema, and
-type checks; creates a production build; checks the rendered interface; and
-verifies both API contracts.
+`pnpm run verify` is the same release gate used by GitHub Actions. It performs lint,
+type checks, detector/runtime/OTLP tests, a production build, rendered API
+checks, the curated regression evaluation, both executable demos, and a real
+tarball install in an isolated consumer project.
 
 Individual commands:
 
@@ -215,9 +250,32 @@ Individual commands:
 pnpm test:engine
 pnpm typecheck
 pnpm test:sdk-package
+pnpm test:sdk-tarball
+pnpm eval:check
 pnpm build
 pnpm test:render
 ```
+
+The current `curated-regression-v1` set contains 26 deliberately small
+positive and negative cases. It currently measures 100% precision, recall,
+specificity, and expected-signal coverage with a 0% false-positive rate at the
+medium threshold. These are regression-set results, not a claim about unseen
+production traffic. Add real anonymized traces as integrations expose new
+language and policy patterns.
+
+## Package and release safety
+
+The public package is `lineageguard`. It has no runtime dependencies and
+exports the main SDK plus `runtime`, `graph`, `otel`, `analysis`, and
+`pipeline` subpaths. The package lifecycle compiles declarations before every
+pack, and publishing runs the complete repository release gate.
+
+The repository pins pnpm 11.9.0, disables implicit peer installation, declares
+the required Webpack peer explicitly, allowlists only the three required native
+build packages, explicitly disables unused Sharp installation, and commits the
+regenerated lockfile. A fresh
+`pnpm install --frozen-lockfile` is therefore the supported installation path.
+See [docs/releasing.md](./docs/releasing.md) for maintainer release steps.
 
 ## Deployment contract
 
@@ -280,11 +338,17 @@ sdk/
   index.ts               Runtime instrumentation API
   runtime.ts             Agent, handoff, tool, and recovery supervisor
   graph.ts               DAG builder API
-  package.json           Publishable @lineageguard/sdk manifest
+  otel.ts                OTLP/JSON GenAI trace adapter
+  package.json           Publishable lineageguard manifest
+evals/
+  cases.ts               Curated positive and negative regression cases
+  run.ts                 Measured release threshold
 examples/
   guarded-agent-runtime.ts  Executable non-web integration
+  otel-ingestion.ts      Executable OTLP integration
 docs/
   agent-runtime-integration.md  Runtime interception guide
+  releasing.md           Maintainer release checklist
   trace-contract.md      Framework-independent trace contract
 tests/
   analysis.test.ts       Detection behavior

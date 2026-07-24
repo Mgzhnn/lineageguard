@@ -20,7 +20,10 @@ test("package export targets exist after compilation", async () => {
     await readFile(new URL("package.json", packageRoot), "utf8"),
   );
   const sdk = await import(new URL("dist/sdk/index.js", packageRoot));
+  assert.equal(packageJson.name, "lineageguard");
   assert.equal(packageJson.version, sdk.PRODUCT_VERSION);
+  assert.equal(packageJson.publishConfig.access, "public");
+  assert.equal(packageJson.dependencies, undefined);
   const rootPackage = JSON.parse(
     await readFile(new URL("../package.json", packageRoot), "utf8"),
   );

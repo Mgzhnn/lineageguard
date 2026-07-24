@@ -1,0 +1,17 @@
+packages:
+  - sdk
+
+autoInstallPeers: false
+strictPeerDependencies: true
+
+ignoredOptionalDependencies:
+  - sharp
+
+overrides:
+  postcss: 8.5.22
+
+allowBuilds:
+  esbuild: true
+  sharp: false
+  unrs-resolver: true
+  workerd: true

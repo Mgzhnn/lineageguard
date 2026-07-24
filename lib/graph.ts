@@ -127,6 +127,10 @@ function highestSeverity(issues: LineageIssue[]): Severity | "clean" {
   );
 }
 
+function graphEdgeId(from: string, to: string) {
+  return `${encodeURIComponent(from)}->${encodeURIComponent(to)}`;
+}
+
 function validateAndSortGraph(nodes: readonly TraceGraphStage[]) {
   if (nodes.length < 2) {
     throw new TracePayloadError(
@@ -329,7 +333,7 @@ export function runReliabilityGraphPipeline(
       const parent = nodeById.get(parentId)!;
       const comparedText = node.inheritedClaims?.[parentId] ?? node.text;
       const edgeIndex = edges.length;
-      const edgeId = `${parentId}->${node.id}`;
+      const edgeId = graphEdgeId(parentId, node.id);
       const pairAnalysis = analyzeLineage(
         [
           parent,

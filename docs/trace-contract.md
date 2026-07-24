@@ -145,3 +145,24 @@ Call `parseTraceGraphPayload(payload)` and
 `runReliabilityGraphPipeline(nodes, guardrail, options)`. The graph report
 returns topological order, edge-specific issues, branch-aware contamination,
 verified merge parents, and the exact retry node.
+
+## OpenTelemetry OTLP/JSON
+
+The SDK subpath `lineageguard/otel` accepts an OTLP/JSON traces payload with
+the standard `resourceSpans`, `scopeSpans`, and `spans` hierarchy. It is an
+in-process adapter, not an additional HTTP route.
+
+By default:
+
+- `gen_ai.input.messages` or `lineageguard.source` supplies authoritative
+  content for a selected root output span;
+- `gen_ai.output.messages` or `lineageguard.output` supplies each agent output;
+- `lineageguard.agent.name` overrides the span name used as the node label;
+- `lineageguard.guardrail` supplies inherited policy;
+- `gen_ai.workflow.name` or resource `service.name` supplies the run name.
+
+The adapter supports OTLP `stringValue`, array, and key-value-list `AnyValue`
+representations. It validates hexadecimal trace/span identifiers, duplicate
+spans and attributes, trace selection, parent cycles, source provenance, and
+graph limits. Same-trace span links become additional graph parents. A
+multi-trace batch requires an explicit `traceId`.

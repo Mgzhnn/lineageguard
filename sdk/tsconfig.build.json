@@ -19,6 +19,7 @@
     "./index.ts",
     "./runtime.ts",
     "./graph.ts",
+    "./otel.ts",
     "../lib/analysis.ts",
     "../lib/fingerprint.ts",
     "../lib/graph.ts",

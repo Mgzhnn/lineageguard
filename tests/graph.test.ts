@@ -169,3 +169,63 @@ test("rejects an invalid graph blocking threshold", () => {
     /blocking threshold must be/i,
   );
 });
+
+test("keeps graph edge ids unambiguous when node ids contain arrows", () => {
+  const run = runReliabilityGraphPipeline([
+    {
+      id: "a->b",
+      label: "First root",
+      text: "The estimate may be 5%.",
+      parentIds: [],
+    },
+    {
+      id: "c",
+      label: "First child",
+      text: "The estimate may be 5%.",
+      parentIds: ["a->b"],
+    },
+    {
+      id: "a",
+      label: "Second root",
+      text: "The estimate may be 5%.",
+      parentIds: [],
+    },
+    {
+      id: "b->c",
+      label: "Second child",
+      text: "The estimate may be 5%.",
+      parentIds: ["a"],
+    },
+  ]);
+
+  assert.deepEqual(
+    run.edges.map((edge) => edge.id).sort(),
+    ["a-%3Eb->c", "a->b-%3Ec"],
+  );
+});
+
+test("copies graph builder inputs before storing them", () => {
+  const parentIds = ["facts"];
+  const inheritedClaims = { facts: "The estimate may be 5%." };
+  const run = new LineageGuardGraphRun()
+    .recordRoot("facts", "Facts", "The estimate may be 5%.")
+    .recordHandoff(
+      "writer",
+      "Writer",
+      "The estimate may be 5%.",
+      parentIds,
+      inheritedClaims,
+    );
+
+  parentIds[0] = "missing";
+  inheritedClaims.facts = "The estimate is definitely 50%.";
+
+  assert.deepEqual(run.toTrace().nodes[1], {
+    id: "writer",
+    label: "Writer",
+    text: "The estimate may be 5%.",
+    parentIds: ["facts"],
+    inheritedClaims: { facts: "The estimate may be 5%." },
+  });
+  assert.equal(run.finalize().firstBlockingEdgeId, null);
+});

@@ -41,7 +41,7 @@ can call any local model, hosted model, rules engine, or human queue.
 import {
   LineageGuardSession,
   type GuardedAgent,
-} from "../sdk/index.ts";
+} from "lineageguard";
 
 const guard = new LineageGuardSession({
   runName: "Research to publishing",
@@ -251,6 +251,44 @@ multi-region limits.
 For tool safety, a local wrapper in the host language remains preferable. A
 network check can fail open if the caller ignores an error, and it cannot undo
 a tool that an opaque agent already invoked.
+
+## OpenTelemetry ingestion
+
+If the agent platform already exports OTLP/JSON, convert its GenAI spans
+directly:
+
+```ts
+import {
+  parseOtlpTracePayload,
+  runOtlpReliabilityPipeline,
+} from "lineageguard/otel";
+
+const normalized = parseOtlpTracePayload(otlpJson, {
+  traceId,
+  guardrail,
+});
+const report = runOtlpReliabilityPipeline(otlpJson, {
+  traceId,
+  guardrail,
+});
+```
+
+The adapter uses standard `gen_ai.input.messages` and
+`gen_ai.output.messages` attributes by default. `lineageguard.source`,
+`lineageguard.output`, `lineageguard.guardrail`, and
+`lineageguard.agent.name` are supported when an instrumentation layer wants
+explicit values. Attribute-key lists are configurable.
+
+Only spans with a recognized output attribute become lineage nodes. Parent
+spans and same-trace links create graph edges. A selected root output must have
+an input/source attribute or an explicit `sourceText`; otherwise conversion
+fails closed. Batches containing multiple traces require an explicit
+`traceId`.
+
+GenAI input and output attributes commonly contain sensitive content. Apply
+redaction, access control, and retention policy before exporting or storing
+them. LineageGuard performs this conversion locally and does not transmit the
+trace.
 
 ## What model-independent means
 

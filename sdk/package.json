@@ -1,8 +1,25 @@
 {
-  "name": "@lineageguard/sdk",
+  "name": "lineageguard",
   "version": "0.4.0",
   "description": "Deterministic claim-lineage analysis and runtime enforcement for AI agent handoffs.",
   "license": "MIT",
+  "keywords": [
+    "ai-agents",
+    "agentic-ai",
+    "guardrails",
+    "lineage",
+    "opentelemetry",
+    "reliability"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mgzhnn/lineageguard.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://github.com/Mgzhnn/lineageguard#readme",
+  "bugs": {
+    "url": "https://github.com/Mgzhnn/lineageguard/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./dist/sdk/index.js",
@@ -19,6 +36,10 @@
     "./graph": {
       "types": "./dist/sdk/graph.d.ts",
       "import": "./dist/sdk/graph.js"
+    },
+    "./otel": {
+      "types": "./dist/sdk/otel.d.ts",
+      "import": "./dist/sdk/otel.js"
     },
     "./analysis": {
       "types": "./dist/lib/analysis.d.ts",
@@ -37,7 +58,12 @@
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
+    "prepublishOnly": "pnpm -C .. run verify"
   }
 }

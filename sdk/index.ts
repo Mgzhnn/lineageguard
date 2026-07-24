@@ -120,6 +120,10 @@ export {
   parseTraceGraphPayload,
   runReliabilityGraphPipeline,
 } from "../lib/graph.ts";
+export {
+  parseOtlpTracePayload,
+  runOtlpReliabilityPipeline,
+} from "./otel.ts";
 export type { ReliabilityPipelineRun } from "../lib/pipeline.ts";
 export type {
   AnalysisOptions,
@@ -177,3 +181,7 @@ export type {
   ToolPolicy,
 } from "./runtime.ts";
 export type { LineageGuardGraphRunOptions } from "./graph.ts";
+export type {
+  NormalizedOtlpLineageTrace,
+  OtlpLineageOptions,
+} from "./otel.ts";

@@ -211,6 +211,10 @@ const severityRank: Record<Severity | "clean", number> = {
 let sessionCounter = 0;
 
 function createSessionId() {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  if (randomId) {
+    return `LGS-${randomId.replaceAll("-", "").slice(0, 20).toUpperCase()}`;
+  }
   sessionCounter += 1;
   const entropy = fingerprintValue({
     timestamp: new Date().toISOString(),

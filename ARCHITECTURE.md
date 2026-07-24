@@ -43,6 +43,8 @@ All entry surfaces execute the same reliability engine:
   invocation;
 - `LineageGuardGraphRun` and `runReliabilityGraphPipeline` analyze branches,
   merges, and multi-parent claims;
+- `parseOtlpTracePayload` maps OTLP/JSON GenAI spans, parents, and links into
+  the validated graph contract;
 - `POST /api/evaluate` serves non-TypeScript runtimes;
 - the interactive workspace visualizes the resulting trace and recovery;
 - the JSON adapter normalizes external events into stages.
@@ -76,6 +78,9 @@ The v1.1 graph contract adds `parentIds` and optional `inheritedClaims`.
 from that parent, avoiding meaningless whole-document comparisons between
 unrelated branches. Graphs are topologically sorted, missing parents and cycles
 are rejected, and contamination follows descendants rather than array order.
+OTLP conversion creates an explicit authoritative source node for each selected
+root output, so the first model response is never silently promoted to source
+evidence.
 
 ## Rule families
 
@@ -144,6 +149,8 @@ preventing a resumed session from silently changing its detector policy.
 - API bodies are bounded while streaming instead of after full buffering.
 - Payload shape, field lengths, schema version, and node identity are validated
   before the pipeline receives them.
+- OTLP identifiers, trace selection, duplicate attributes, source provenance,
+  and parent cycles are validated before graph construction.
 - The in-process detector makes no network request and needs no secret.
 - The optional server is stateless and does not persist trace contents.
 - Evaluation responses declare `Cache-Control: no-store`.
@@ -181,14 +188,22 @@ meaning, or authority families, and return findings for a specific edge. A
 semantic or domain detector can therefore be optional without replacing the
 free deterministic baseline or inventing a confidence score.
 
+The curated evaluation harness records precision, recall, specificity,
+false-positive rate, and expected-signal coverage at the configured blocking
+threshold. It is a regression gate for known cases, not an estimate of
+production accuracy.
+
 Agent frameworks can integrate through callbacks or submit the generic JSON
 contract from any language. Recovery remains plain data so a host runtime can
 map it to its own queues, approvals, and retry system.
 
 ## Deployment shape
 
-The compiled dependency-free SDK runs in-process and does not require the
-website. The optional stateless Vinext service exposes `GET /api/health` and
-`POST /api/evaluate` for both chain and graph payloads. There is no database or
-object-storage binding. Authentication secrets remain runtime configuration,
-and durable session stores remain host adapters.
+The compiled `lineageguard` package runs in-process, has no runtime
+dependencies, and does not require the website. Its package lifecycle builds
+JavaScript and declarations before packing; CI installs the produced tarball
+into an isolated consumer and imports every public subpath. The optional
+stateless Vinext service exposes `GET /api/health` and `POST /api/evaluate` for
+both chain and graph payloads. There is no database or object-storage binding.
+Authentication secrets remain runtime configuration, and durable session
+stores remain host adapters.

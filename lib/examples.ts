@@ -1,4 +1,4 @@
-import type { TraceStage } from "./analysis";
+import type { TraceStage } from "./analysis.ts";
 
 export type TraceExample = {
   id: string;

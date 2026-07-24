@@ -199,18 +199,73 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function findTerms(text: string, terms: RankedTerm[]) {
+function hasUncertaintyHedgeInClause(
+  text: string,
+  strongTermIndex: number,
+  strongTermLength: number,
+) {
+  const before = text.slice(0, strongTermIndex);
+  const clauseStart =
+    Math.max(
+      before.lastIndexOf("."),
+      before.lastIndexOf("!"),
+      before.lastIndexOf("?"),
+      before.lastIndexOf(";"),
+    ) + 1;
+  const after = text.slice(strongTermIndex + strongTermLength);
+  const nextBoundary = after.search(/[.!?;]/);
+  const clauseEnd =
+    nextBoundary === -1
+      ? text.length
+      : strongTermIndex + strongTermLength + nextBoundary;
+  const clause = text.slice(clauseStart, clauseEnd);
+  const strongOffset = strongTermIndex - clauseStart;
+  const contrastBoundary =
+    /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b/i;
+  const hedgePattern =
+    /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appears|suggests|estimated|approximately|likely)\b/gi;
+
+  for (const hedge of clause.matchAll(hedgePattern)) {
+    if (hedge.index === undefined) continue;
+    const hedgeStart = hedge.index;
+    const hedgeEnd = hedgeStart + hedge[0].length;
+    const between =
+      hedgeStart < strongOffset
+        ? clause.slice(hedgeEnd, strongOffset)
+        : clause.slice(strongOffset + strongTermLength, hedgeStart);
+    if (!contrastBoundary.test(between)) return true;
+  }
+  return false;
+}
+
+function findTerms(
+  text: string,
+  terms: RankedTerm[],
+  scopeStrongTermsWithUncertainty = false,
+) {
   const normalized = normalize(text);
-  return terms.filter(({ term }) => {
+  return terms.filter(({ term, rank }) => {
     const match = new RegExp(`\\b${escapeRegex(term)}\\b`, "i").exec(normalized);
     if (!match) return false;
     const prefix = normalized.slice(Math.max(0, match.index - 18), match.index);
-    return !/\b(?:not|no|never)\s+(?:been\s+)?$/i.test(prefix);
+    if (/\b(?:not|no|never)\s+(?:been\s+)?$/i.test(prefix)) return false;
+    if (
+      scopeStrongTermsWithUncertainty &&
+      rank >= 2 &&
+      hasUncertaintyHedgeInClause(normalized, match.index, match[0].length)
+    ) {
+      return false;
+    }
+    return true;
   });
 }
 
-function highestRankedTerm(text: string, terms: RankedTerm[]) {
-  const found = findTerms(text, terms);
+function highestRankedTerm(
+  text: string,
+  terms: RankedTerm[],
+  scopeStrongTermsWithUncertainty = false,
+) {
+  const found = findTerms(text, terms, scopeStrongTermsWithUncertainty);
   if (!found.length) return null;
   return found.reduce((highest, candidate) =>
     candidate.rank > highest.rank ? candidate : highest,
@@ -244,14 +299,33 @@ function extractNegations(text: string) {
   );
 }
 
-export function getTraceSignalSnapshot(text: string): TraceSignalSnapshot {
-  const certainty = highestRankedTerm(text, certaintyTerms);
-  const scope = highestRankedTerm(text, quantifierTerms);
-  const completedActions = unique(
-    [...normalize(text).matchAll(completedActionPattern)].map(
-      (match) => match[0],
-    ),
+function extractCompletedActions(text: string) {
+  const normalized = normalize(text);
+  return unique(
+    [...normalized.matchAll(completedActionPattern)]
+      .filter((match) => {
+        const prefix = normalized.slice(
+          Math.max(0, (match.index ?? 0) - 80),
+          match.index,
+        );
+        const negations = [...prefix.matchAll(negationPattern)];
+        const lastNegation = negations.at(-1);
+        if (!lastNegation || lastNegation.index === undefined) return true;
+        const between = prefix.slice(
+          lastNegation.index + lastNegation[0].length,
+        );
+        if (/[.!?;,:]|\b(?:and|but|however)\b/i.test(between)) return true;
+        const interveningWords = between.trim().split(/\s+/).filter(Boolean);
+        return interveningWords.length > 3;
+      })
+      .map((match) => match[0]),
   );
+}
+
+export function getTraceSignalSnapshot(text: string): TraceSignalSnapshot {
+  const certainty = highestRankedTerm(text, certaintyTerms, true);
+  const scope = highestRankedTerm(text, quantifierTerms);
+  const completedActions = extractCompletedActions(text);
 
   return {
     numbers: extractNumberClaims(text),
@@ -338,7 +412,6 @@ function analyzeCustomRules(
 
   for (const rule of rules) {
     const ruleId = rule.id.trim();
-    if (!ruleId) throw new Error("Custom lineage rule ids must be non-empty.");
     const evaluated = rule.evaluate(context);
     const findings = evaluated
       ? Array.isArray(evaluated)
@@ -346,6 +419,26 @@ function analyzeCustomRules(
         : [evaluated]
       : [];
     findings.forEach((finding, findingIndex) => {
+      if (
+        !finding ||
+        typeof finding !== "object" ||
+        (finding.severity !== "low" &&
+          finding.severity !== "medium" &&
+          finding.severity !== "high") ||
+        typeof finding.title !== "string" ||
+        typeof finding.explanation !== "string" ||
+        (finding.id !== undefined && typeof finding.id !== "string") ||
+        (finding.beforeTerms !== undefined &&
+          (!Array.isArray(finding.beforeTerms) ||
+            finding.beforeTerms.some((term) => typeof term !== "string"))) ||
+        (finding.afterTerms !== undefined &&
+          (!Array.isArray(finding.afterTerms) ||
+            finding.afterTerms.some((term) => typeof term !== "string")))
+      ) {
+        throw new Error(
+          `Custom lineage rule "${ruleId}" returned an invalid finding.`,
+        );
+      }
       const title = finding.title.trim();
       const explanation = finding.explanation.trim();
       if (!title || !explanation) {
@@ -374,6 +467,38 @@ function analyzeCustomRules(
   }
 
   return issues;
+}
+
+function validateCustomRules(
+  rules: readonly CustomLineageRule[] | undefined,
+) {
+  if (rules === undefined) return [] as readonly CustomLineageRule[];
+  if (!Array.isArray(rules)) {
+    throw new Error("Custom lineage rules must be an array.");
+  }
+  const ids = new Set<string>();
+  rules.forEach((rule) => {
+    if (
+      !rule ||
+      typeof rule !== "object" ||
+      typeof rule.id !== "string" ||
+      !rule.id.trim() ||
+      (rule.family !== "evidence" &&
+        rule.family !== "meaning" &&
+        rule.family !== "authority") ||
+      typeof rule.evaluate !== "function"
+    ) {
+      throw new Error(
+        "Each custom lineage rule needs an id, family, and synchronous evaluator.",
+      );
+    }
+    const id = rule.id.trim();
+    if (ids.has(id)) {
+      throw new Error(`Custom lineage rule id "${id}" is duplicated.`);
+    }
+    ids.add(id);
+  });
+  return rules;
 }
 
 function analyzeTransition(
@@ -409,8 +534,8 @@ function analyzeTransition(
     );
   }
 
-  const beforeCertainty = highestRankedTerm(from.text, certaintyTerms);
-  const afterCertainty = highestRankedTerm(to.text, certaintyTerms);
+  const beforeCertainty = highestRankedTerm(from.text, certaintyTerms, true);
+  const afterCertainty = highestRankedTerm(to.text, certaintyTerms, true);
   if (
     afterCertainty &&
     ((beforeCertainty && afterCertainty.rank > beforeCertainty.rank) ||
@@ -496,11 +621,7 @@ function analyzeGuardrail(
     const previous = stages[stageIndex - 1];
     const currentNormalized = normalize(current.text);
     const previousNormalized = normalize(previous.text);
-    const completedActions = unique(
-      [...currentNormalized.matchAll(completedActionPattern)].map(
-        (match) => match[0],
-      ),
-    );
+    const completedActions = extractCompletedActions(current.text);
     const retainedWords = importantWords.filter((word) =>
       new RegExp(`\\b${escapeRegex(word)}\\b`, "i").test(currentNormalized),
     );
@@ -575,6 +696,7 @@ export function analyzeLineage(
   guardrail = "",
   options: AnalysisOptions = {},
 ): AnalysisResult {
+  const rules = validateCustomRules(options.rules);
   const usableStages = stages.map((stage) => ({
     ...stage,
     text: stage.text.trim(),
@@ -592,7 +714,7 @@ export function analyzeLineage(
         to,
         index,
         guardrail,
-        options.rules ?? [],
+        rules,
       ),
     );
   }

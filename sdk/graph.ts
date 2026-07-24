@@ -103,7 +103,14 @@ export class LineageGuardGraphRun {
       label: label.trim(),
       text: text.trim(),
       parentIds: parentIds.map((parentId) => parentId.trim()),
-      inheritedClaims,
+      inheritedClaims: inheritedClaims
+        ? Object.fromEntries(
+            Object.entries(inheritedClaims).map(([parentId, claim]) => [
+              parentId.trim(),
+              claim.trim(),
+            ]),
+          )
+        : undefined,
     };
     if (!node.id || !node.label || !node.text) {
       throw new Error("Graph node id, label, and text must be non-empty.");

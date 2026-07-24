@@ -1,8 +1,26 @@
 {
-  "name": "lineageguard",
+  "name": "lineageguard-site",
   "version": "0.4.0",
   "private": true,
   "description": "Local-first warning system for claim mutation across AI agent handoffs.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mgzhnn/lineageguard.git"
+  },
+  "homepage": "https://github.com/Mgzhnn/lineageguard#readme",
+  "bugs": {
+    "url": "https://github.com/Mgzhnn/lineageguard/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "agentic-ai",
+    "guardrails",
+    "lineage",
+    "opentelemetry",
+    "reliability"
+  ],
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -10,17 +28,22 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test:engine": "node --experimental-strip-types --test tests/analysis.test.ts tests/api-security.test.ts tests/fingerprint.test.ts tests/graph.test.ts tests/pipeline.test.ts tests/trace-schema.test.ts tests/sdk.test.ts tests/runtime.test.ts",
+    "test:engine": "node --experimental-strip-types --test tests/analysis.test.ts tests/api-security.test.ts tests/fingerprint.test.ts tests/graph.test.ts tests/otel.test.ts tests/pipeline.test.ts tests/trace-schema.test.ts tests/sdk.test.ts tests/runtime.test.ts",
     "test:render": "node --test tests/rendered-html.test.mjs",
     "typecheck": "tsc --noEmit",
     "build:sdk": "tsc -p sdk/tsconfig.build.json",
     "test:sdk-package": "pnpm build:sdk && node --test tests/sdk-package.test.mjs",
+    "test:sdk-tarball": "node --test tests/sdk-tarball.test.mjs",
     "test": "pnpm test:engine && pnpm typecheck && pnpm test:sdk-package && vinext build && pnpm test:render",
+    "eval": "node --experimental-strip-types evals/run.ts",
+    "eval:check": "node --experimental-strip-types evals/run.ts --check",
+    "verify": "pnpm lint && pnpm test && pnpm eval:check && pnpm test:sdk-tarball && pnpm demo:agent && pnpm demo:otel",
     "demo:agent": "node --experimental-strip-types examples/guarded-agent-runtime.ts",
+    "demo:otel": "node --experimental-strip-types examples/otel-ingestion.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
-    "next": "16.2.6",
+    "next": "16.2.11",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -33,12 +56,13 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.11",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.0.13",
+    "webpack": "5.108.4",
     "wrangler": "4.92.0"
   },
   "type": "module"

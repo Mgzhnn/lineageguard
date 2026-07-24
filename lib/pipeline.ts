@@ -233,7 +233,9 @@ export function runReliabilityPipeline(
         (issue) => issue.transitionIndex === transitionIndex,
       );
       return {
-        id: `${stages[transitionIndex].id}-${stages[transitionIndex + 1].id}`,
+        id: `${encodeURIComponent(
+          stages[transitionIndex].id,
+        )}->${encodeURIComponent(stages[transitionIndex + 1].id)}`,
         from: stages[transitionIndex].id,
         to: stages[transitionIndex + 1].id,
         severity: transition.severity,

@@ -186,6 +186,75 @@ test("does not treat an approval itself as a completed protected action", () => 
   );
 });
 
+test("does not treat a negated action as completed", () => {
+  const result = analyzeLineage(
+    [
+      {
+        id: "source",
+        label: "Request",
+        text: "Prepare a customer email draft.",
+      },
+      {
+        id: "draft",
+        label: "Draft agent",
+        text: "The customer email is ready but not sent.",
+      },
+    ],
+    "Draft only. Do not send without approval.",
+  );
+
+  assert.equal(
+    result.issues.some((issue) => issue.type === "guardrail"),
+    false,
+  );
+});
+
+test("keeps strong verbs scoped by an uncertainty qualifier", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "Source",
+      text: "The change is likely to help.",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      text: "It is likely that the change will help.",
+    },
+    {
+      id: "reviewer",
+      label: "Reviewer",
+      text: "The change will likely help.",
+    },
+  ]);
+
+  assert.equal(
+    result.issues.some((issue) => issue.type === "certainty"),
+    false,
+  );
+});
+
+test("does not let a hedge hide certainty after a contrast boundary", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "Source",
+      text: "The change is likely to help.",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      text:
+        "The change is likely to help, but it will definitely eliminate the problem.",
+    },
+  ]);
+
+  assert.equal(
+    result.issues.some((issue) => issue.type === "certainty"),
+    true,
+  );
+});
+
 test("supports inspectable domain rules without changing the core detector", () => {
   const result = analyzeLineage(
     [
@@ -226,4 +295,40 @@ test("supports inspectable domain rules without changing the core detector", () 
   const issue = result.issues.find((item) => item.type === "custom");
   assert.equal(issue?.family, "evidence");
   assert.match(issue?.id ?? "", /cold-chain/);
+});
+
+test("rejects duplicate custom rules and malformed findings", () => {
+  const stages = [
+    { id: "source", label: "Source", text: "The estimate may be 5%." },
+    { id: "agent", label: "Agent", text: "The estimate may be 5%." },
+  ];
+  const validRule = {
+    id: "domain-check",
+    family: "evidence" as const,
+    evaluate: () => null,
+  };
+
+  assert.throws(
+    () =>
+      analyzeLineage(stages, "", {
+        rules: [validRule, validRule],
+      }),
+    /duplicated/i,
+  );
+  assert.throws(
+    () =>
+      analyzeLineage(stages, "", {
+        rules: [
+          {
+            ...validRule,
+            evaluate: () => ({
+              severity: "critical",
+              title: "Invalid severity",
+              explanation: "This must fail closed.",
+            }),
+          } as never,
+        ],
+      }),
+    /invalid finding/i,
+  );
 });
