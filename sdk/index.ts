@@ -157,6 +157,7 @@ export {
   LineageGuardBlockedError,
   LineageGuardDuplicateExecutionError,
   LineageGuardSession,
+  SEMANTIC_JUDGE_RULE_ID,
 } from "./runtime.ts";
 export { LineageGuardGraphRun } from "./graph.ts";
 export type {
@@ -173,6 +174,9 @@ export type {
   RegisteredToolExecutionOptions,
   RuntimeEvent,
   RuntimeEventType,
+  SemanticJudge,
+  SemanticJudgeContext,
+  SemanticJudgeFinding,
   ToolApproval,
   ToolApprovalContext,
   ToolApprovalVerifier,

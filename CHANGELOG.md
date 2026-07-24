@@ -2,6 +2,25 @@
 
 All notable changes to LineageGuard are documented here.
 
+## 0.5.0
+
+- Added equivalence-aware canonicalization so formatting rewrites of the same
+  value ($5k vs $5,000, 500mg vs 0.5g, 2026-07-24 vs July 24 2026, 5만원 vs
+  ₩50,000) no longer freeze a run, while true value changes behind those
+  rewrites are still detected.
+- Added written-out number detection next to measurable nouns ("three
+  customers" vs "five customers").
+- Added Korean lexicons for the certainty, quantifier, negation, completed
+  action, and guardrail signals, including Korean magnitude and unit
+  canonicalization and Korean date parsing.
+- Added a low-severity coverage signal: a trace written mostly in a script the
+  meaning and authority families cannot read is never reported as clean.
+- Added the optional asynchronous `semanticJudge` session hook with fail-closed
+  defaults, snapshot persistence, a reserved replay rule id, and an executable
+  `demo:semantic` example for catching paraphrase drift with an LLM reviewer.
+- Extended the curated regression set to 38 cases (`curated-regression-v2`)
+  covering equivalence negatives, Korean positives, and word-number cases.
+
 ## 0.4.0
 
 - Added fail-closed runtime supervision, scoped one-time approvals, registered

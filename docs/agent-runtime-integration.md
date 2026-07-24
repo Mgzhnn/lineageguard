@@ -299,3 +299,10 @@ explicit tool boundary.
 It does not mean perfect semantic understanding. The free detector is
 deterministic and intentionally inspectable; human review remains the final
 authority for ambiguous warnings.
+
+Hosts that want semantic paraphrase coverage can configure the optional
+asynchronous `semanticJudge` session hook (see `examples/semantic-judge.ts`
+and the README). The judge runs before the deterministic gate in
+`runAgent`/`runSequence`, its findings become inspectable meaning-family
+issues, and a judge failure fails closed by default. The core never calls a
+model on its own.

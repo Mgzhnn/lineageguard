@@ -551,3 +551,160 @@ test("rejects invalid live enforcement policy instead of weakening it", () => {
     /explicit sideEffect boolean/i,
   );
 });
+
+test("blocks a paraphrase flagged by the semantic judge", async () => {
+  const judged: string[] = [];
+  const guard = new LineageGuardSession({
+    semanticJudge: (context) => {
+      judged.push(context.proposedOutput);
+      if (/finished/i.test(context.proposedOutput)) {
+        return [
+          {
+            severity: "high",
+            title: "Paraphrase changed the claim's status",
+            explanation: "An in-progress review became a finished one.",
+          },
+        ];
+      }
+      return null;
+    },
+  }).recordSource(
+    "Source",
+    "The trial data is still under review by the safety board.",
+  );
+
+  const result = await guard.runSequence(
+    [
+      {
+        id: "summarizer",
+        name: "Summarizer",
+        execute: () =>
+          "The safety board finished its review of the trial data.",
+      },
+    ],
+    {},
+  );
+
+  assert.equal(result.status, "blocked");
+  assert.equal(judged.length, 1);
+  const issue = result.report.analysis.issues.find(
+    (item) => item.type === "custom",
+  );
+  assert.ok(issue);
+  assert.match(issue.id, /lineageguard:semantic-judge/);
+  assert.equal(issue.family, "meaning");
+});
+
+test("semantic judge failures fail closed by default and warn when configured", async () => {
+  const failingJudge = () => {
+    throw new Error("judge offline");
+  };
+  const events: RuntimeEvent[] = [];
+
+  const blocking = new LineageGuardSession({
+    semanticJudge: failingJudge,
+    onEvent: (event) => events.push(event),
+  }).recordSource("Source", "Summarize the support request.");
+  const blocked = await blocking.runSequence(
+    [
+      {
+        id: "writer",
+        name: "Writer",
+        execute: () => "A summary of the support request.",
+      },
+    ],
+    {},
+  );
+  assert.equal(blocked.status, "blocked");
+  assert.ok(events.some((event) => event.type === "semantic-judge-failed"));
+
+  const warning = new LineageGuardSession({
+    semanticJudge: failingJudge,
+    semanticJudgeFailureMode: "warn",
+  }).recordSource("Source", "Summarize the support request.");
+  const allowed = await warning.runSequence(
+    [
+      {
+        id: "writer",
+        name: "Writer",
+        execute: () => "A summary of the support request.",
+      },
+    ],
+    {},
+  );
+  assert.equal(allowed.status, "completed");
+  assert.ok(
+    allowed.report.analysis.issues.some(
+      (issue) =>
+        issue.type === "custom" && issue.severity === "low",
+    ),
+  );
+});
+
+test("persists semantic findings through snapshots", async () => {
+  let saved: LineageGuardSessionSnapshot | null = null;
+  const store: LineageGuardSnapshotStore = {
+    load: async () => saved,
+    save: async (snapshot) => {
+      saved = snapshot;
+    },
+  };
+  const guard = new LineageGuardSession({
+    sessionId: "judge-session",
+    semanticJudge: () => [
+      {
+        severity: "high",
+        title: "Semantic drift",
+        explanation: "The paraphrase changed the claim.",
+      },
+    ],
+  }).recordSource("Source", "The report is still in draft.");
+  const result = await guard.runSequence(
+    [
+      {
+        id: "writer",
+        name: "Writer",
+        execute: () => "A restated version of the report summary.",
+      },
+    ],
+    {},
+  );
+  assert.equal(result.status, "blocked");
+  const persisted: LineageGuardSessionSnapshot | null =
+    await guard.checkpoint(store);
+  assert.equal(persisted?.semanticFindings?.length, 1);
+
+  const restored = await LineageGuardSession.resume(store, "judge-session");
+  assert.ok(
+    restored
+      .getReport()
+      .analysis.issues.some(
+        (issue) => issue.type === "custom" && issue.title === "Semantic drift",
+      ),
+  );
+
+  const checkpoint = restored.resetToLastVerified();
+  assert.equal(checkpoint.label, "Source");
+  assert.equal(
+    restored
+      .getReport()
+      .analysis.issues.some((issue) => issue.type === "custom"),
+    false,
+  );
+});
+
+test("rejects rules that claim the reserved semantic judge id", () => {
+  assert.throws(
+    () =>
+      new LineageGuardSession({
+        rules: [
+          {
+            id: "lineageguard:semantic-judge",
+            family: "meaning",
+            evaluate: () => null,
+          },
+        ],
+      }),
+    /reserved/i,
+  );
+});

@@ -27,6 +27,7 @@ export const issueLabels: Record<IssueType, string> = {
   quantifier: "SCOPE",
   negation: "NEGATION",
   guardrail: "GUARDRAIL",
+  coverage: "COVERAGE",
   custom: "CUSTOM RULE",
 };
 

@@ -297,6 +297,201 @@ test("supports inspectable domain rules without changing the core detector", () 
   assert.match(issue?.id ?? "", /cold-chain/);
 });
 
+test("treats equivalent numeric rewrites as the same claim", () => {
+  const equivalentPairs: Array<[string, string]> = [
+    ["The budget is $5k for the quarter.", "The budget is $5,000 for the quarter."],
+    ["Administer 500mg of the compound daily.", "Administer 0.5g of the compound daily."],
+    ["The deadline is 2026-07-24.", "The deadline is July 24, 2026."],
+    ["마감일은 2026년 7월 24일입니다.", "The deadline is 2026-07-24."],
+    ["The distance is 5 kilometers.", "The distance is 5km."],
+    ["The cost is $2 million.", "The cost is $2,000,000."],
+    ["환불 금액은 5만원입니다.", "환불 금액은 ₩50,000입니다."],
+  ];
+
+  for (const [before, after] of equivalentPairs) {
+    const result = analyzeLineage([
+      { id: "source", label: "Source", text: before },
+      { id: "agent", label: "Agent", text: after },
+    ]);
+    assert.equal(
+      result.issues.some((issue) => issue.type === "number"),
+      false,
+      `expected no number issue for "${before}" -> "${after}"`,
+    );
+  }
+});
+
+test("still flags real numeric mutations after canonicalization", () => {
+  const mutatedPairs: Array<[string, string]> = [
+    ["The deadline is July 24, 2026.", "The deadline is July 27, 2026."],
+    ["The budget is $5k.", "The budget is $50,000."],
+    ["Administer 500mg daily.", "Administer 5g daily."],
+    ["환불 금액은 5만원입니다.", "환불 금액은 50만원입니다."],
+  ];
+
+  for (const [before, after] of mutatedPairs) {
+    const result = analyzeLineage([
+      { id: "source", label: "Source", text: before },
+      { id: "agent", label: "Agent", text: after },
+    ]);
+    assert.equal(
+      result.issues.some((issue) => issue.type === "number"),
+      true,
+      `expected a number issue for "${before}" -> "${after}"`,
+    );
+  }
+});
+
+test("detects written-out number mutations next to measurable nouns", () => {
+  const mutated = analyzeLineage([
+    { id: "source", label: "Source", text: "Three customers reported the issue." },
+    { id: "agent", label: "Agent", text: "Five customers reported the issue." },
+  ]);
+  assert.equal(
+    mutated.issues.some((issue) => issue.type === "number"),
+    true,
+  );
+
+  const equivalent = analyzeLineage([
+    { id: "source", label: "Source", text: "Three customers reported the issue." },
+    { id: "agent", label: "Agent", text: "3 customers reported the issue." },
+  ]);
+  assert.equal(
+    equivalent.issues.some((issue) => issue.type === "number"),
+    false,
+  );
+
+  const idiom = analyzeLineage([
+    {
+      id: "source",
+      label: "Source",
+      text: "One of the reasons is response time for our customers.",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      text: "Response time matters to our customers.",
+    },
+  ]);
+  assert.equal(
+    idiom.issues.some((issue) => issue.type === "number"),
+    false,
+  );
+});
+
+test("detects Korean certainty inflation and negation loss", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "출처",
+      text: "환불은 아직 확정되지 않았으며 검토 중일 수 있습니다.",
+    },
+    {
+      id: "agent",
+      label: "에이전트",
+      text: "환불이 확정되었습니다. 고객에게 안내했습니다.",
+    },
+  ]);
+
+  assert.ok(result.issues.some((issue) => issue.type === "certainty"));
+  assert.ok(result.issues.some((issue) => issue.type === "negation"));
+});
+
+test("enforces a Korean guardrail against a completed protected action", () => {
+  const result = analyzeLineage(
+    [
+      {
+        id: "source",
+        label: "요청",
+        text: "고객 요청: 환불 안내 이메일 초안을 준비해 주세요.",
+      },
+      {
+        id: "agent",
+        label: "에이전트",
+        text: "고객에게 이메일을 전송했습니다.",
+      },
+    ],
+    "초안만 작성하세요. 고객에게 이메일을 전송하지 마세요.",
+  );
+
+  const guardrailIssue = result.issues.find(
+    (issue) => issue.type === "guardrail",
+  );
+  assert.ok(guardrailIssue);
+  assert.equal(guardrailIssue.severity, "high");
+
+  const negated = analyzeLineage(
+    [
+      {
+        id: "source",
+        label: "요청",
+        text: "고객 요청: 환불 안내 이메일 초안을 준비해 주세요.",
+      },
+      {
+        id: "agent",
+        label: "에이전트",
+        text: "초안을 준비했지만 이메일은 전송하지 않았습니다.",
+      },
+    ],
+    "초안만 작성하세요. 고객에게 이메일을 전송하지 마세요.",
+  );
+  assert.equal(
+    negated.issues.some(
+      (issue) =>
+        issue.type === "guardrail" &&
+        issue.title === "Protected action appears completed",
+    ),
+    false,
+  );
+});
+
+test("keeps a stable Korean claim clean", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "출처",
+      text: "환불은 아직 확정되지 않았으며 검토 중일 수 있습니다.",
+    },
+    {
+      id: "agent",
+      label: "에이전트",
+      text: "환불은 아직 확정되지 않았으며 계속 검토 중일 수 있습니다.",
+    },
+  ]);
+  assert.equal(result.overallSeverity, "clean");
+});
+
+test("never reports an unreadable script as clean", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "Source",
+      text: "返金はまだ確定していません。現在確認中です。",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      text: "返金は確定しました。お客様に案内しました。",
+    },
+  ]);
+
+  const coverageIssue = result.issues.find(
+    (issue) => issue.type === "coverage",
+  );
+  assert.ok(coverageIssue);
+  assert.equal(coverageIssue.severity, "low");
+  assert.notEqual(result.overallSeverity, "clean");
+
+  const english = analyzeLineage([
+    { id: "source", label: "Source", text: "The estimate may be 5% for some users this quarter." },
+    { id: "agent", label: "Agent", text: "The estimate may be 5% for some users this quarter." },
+  ]);
+  assert.equal(
+    english.issues.some((issue) => issue.type === "coverage"),
+    false,
+  );
+});
+
 test("rejects duplicate custom rules and malformed findings", () => {
   const stages = [
     { id: "source", label: "Source", text: "The estimate may be 5%." },

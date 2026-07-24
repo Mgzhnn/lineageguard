@@ -272,4 +272,119 @@ export const evaluationCases: EvaluationCase[] = [
     ),
     expectedBlocked: false,
   },
+  {
+    id: "stable-currency-suffix",
+    description: "Allows an equivalent currency magnitude rewrite.",
+    stages: chain(
+      "The budget is $5k for the quarter.",
+      "The budget is $5,000 for the quarter.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-metric-unit",
+    description: "Allows an equivalent metric unit conversion.",
+    stages: chain(
+      "Administer 500mg of the compound daily.",
+      "Administer 0.5g of the compound daily.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-date-format",
+    description: "Allows the same date in a different format.",
+    stages: chain(
+      "The deadline is 2026-07-24.",
+      "The deadline is July 24, 2026.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-word-digit",
+    description: "Allows a written-out number rewritten as a digit.",
+    stages: chain(
+      "Three customers reported the issue.",
+      "3 customers reported the issue.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "date-value-change",
+    description: "Detects a changed date behind a formatting rewrite.",
+    stages: chain(
+      "The deadline is July 24, 2026.",
+      "The deadline is 2026-07-27.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "word-number-change",
+    description: "Detects a mutated written-out number.",
+    stages: chain(
+      "Three customers reported the issue.",
+      "Five customers reported the issue.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "magnitude-change",
+    description: "Detects a value change hidden by magnitude notation.",
+    stages: chain(
+      "The budget is $5k for the quarter.",
+      "The budget is $50,000 for the quarter.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "ko-certainty-flip",
+    description: "Detects Korean unconfirmed language becoming confirmed.",
+    stages: chain(
+      "환불은 아직 확정되지 않았으며 검토 중일 수 있습니다.",
+      "환불이 확정되었습니다.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["certainty", "negation"],
+  },
+  {
+    id: "ko-number-magnitude",
+    description: "Detects a Korean currency magnitude mutation.",
+    stages: chain(
+      "환불 금액은 5만원입니다.",
+      "환불 금액은 50만원입니다.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "ko-guardrail-send",
+    description: "Detects a completed send against a Korean draft-only rule.",
+    guardrail: "초안만 작성하세요. 고객에게 이메일을 전송하지 마세요.",
+    stages: chain(
+      "고객 요청: 환불 안내 이메일 초안을 준비해 주세요.",
+      "고객에게 이메일을 전송했습니다.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["guardrail"],
+  },
+  {
+    id: "ko-stable-copy",
+    description: "Allows a Korean claim that keeps its hedges and negation.",
+    stages: chain(
+      "환불은 아직 확정되지 않았으며 검토 중일 수 있습니다.",
+      "환불은 아직 확정되지 않았으며 계속 검토 중일 수 있습니다.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "ko-stable-currency",
+    description: "Allows equivalent Korean currency formatting.",
+    stages: chain(
+      "환불 금액은 5만원입니다.",
+      "환불 금액은 ₩50,000입니다.",
+    ),
+    expectedBlocked: false,
+  },
 ];

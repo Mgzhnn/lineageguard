@@ -1,35 +1,66 @@
-# LineageGuard
+<div align="center">
 
-LineageGuard is a free, model-independent reliability control plane for AI
-agent handoffs. It records what each agent received and produced, finds the
-first handoff where evidence, meaning, or authority changed, shows the
-downstream blast radius, and prepares the smallest safe retry.
+# 🛡️ LineageGuard
 
-It is one product with five usable surfaces:
+**Catch the first broken handoff in your multi-agent run — before the next agent acts on it.**
 
-- a resumable runtime supervisor that blocks unsafe handoffs before downstream
-  agents run;
-- a host-owned tool registry with scoped, one-time approvals and idempotency;
-- chain and branch/merge DAG analyzers;
-- a dependency-free OTLP/JSON adapter for OpenTelemetry GenAI spans;
-- a visual forensic workspace and framework-neutral HTTP/JSON adapter.
+[![CI](https://github.com/Mgzhnn/lineageguard/actions/workflows/ci.yml/badge.svg)](https://github.com/Mgzhnn/lineageguard/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522.13-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)](./tsconfig.json)
+[![Runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-success)](./sdk/package.json)
 
-No model API, account, database, analytics service, or paid service is required
-for local analysis. A public hosted evaluation endpoint fails closed until
-workspace identity or tenant bearer credentials are configured.
+*A free, model-independent reliability control plane for AI agent handoffs.*
 
-## What the pipeline does
+</div>
+
+---
+
+Multi-agent systems play telephone. One agent hedges, the next asserts; a
+draft-only instruction disappears; `$5k` quietly becomes `$50k` — and by the
+time the final answer looks wrong, you no longer know **which handoff broke
+it**. Final-answer evals judge the output. LineageGuard judges the **chain**.
+
+It records what each agent received and produced, finds the first handoff
+where **evidence, meaning, or authority** changed, shows the downstream blast
+radius, and prepares the smallest safe retry. It doesn't just observe — it
+**blocks** unsafe handoffs and unapproved tool calls before they execute.
+
+No model API, account, database, analytics service, or paid service is
+required for local analysis. English and Korean are covered out of the box.
+
+## One product, five surfaces
+
+| Surface | What it does |
+| --- | --- |
+| 🚦 **Runtime supervisor** | Resumable session that blocks unsafe handoffs before downstream agents run |
+| 🔐 **Tool registry** | Host-owned tools with scoped one-time approvals and idempotency |
+| 🕸️ **DAG analyzers** | Chain and branch/merge analysis with per-parent claim projection |
+| 📡 **OTLP adapter** | Dependency-free OTLP/JSON ingestion for OpenTelemetry GenAI spans |
+| 🔬 **Forensic workspace** | Visual replay UI plus a framework-neutral HTTP/JSON gate |
+
+## How the pipeline works
 
 Every run passes through seven visible modules:
 
 1. **Trace Collector** validates and orders the source and handoffs.
 2. **Claim Lineage Mapper** builds an ancestry graph for the claim.
 3. **Evidence Sentinel** watches numbers, ranges, quantities, dates, and units.
-4. **Meaning Sentinel** watches confidence, scope, and negation.
-5. **Authority Firewall** enforces inherited restrictions and approval gates.
+   Equivalent rewrites of the same value — `$5k` vs `$5,000`, `500mg` vs
+   `0.5g`, `2026-07-24` vs `July 24, 2026`, `5만원` vs `₩50,000`, "three
+   customers" vs "3 customers" — canonicalize to the same claim and do not
+   trigger a warning; a changed value behind the same rewrites still does.
+4. **Meaning Sentinel** watches confidence, scope, and negation, with English
+   and Korean lexicons.
+5. **Authority Firewall** enforces inherited restrictions and approval gates
+   in English and Korean.
 6. **Contamination Tracer** identifies descendants of the first failed handoff.
 7. **Recovery Orchestrator** freezes unsafe descendants and creates a minimal
    rollback-and-retry packet.
+
+A trace written mostly in a script the meaning and authority families cannot
+read raises a visible low-severity coverage signal instead of pretending to be
+clean.
 
 The interface exposes the exact rules and evidence. Its rule-family agreement
 is not presented as a probability or a made-up model confidence score.
@@ -41,7 +72,7 @@ first transition where a structured claim changes turns red; later stages
 become the visible blast radius. The resulting **Mutation Receipt** contains a
 stable run fingerprint, first break, signal types, evidence, and human verdicts.
 
-## Run locally
+## Quick start
 
 Prerequisite: Node.js 22.13 or newer.
 
@@ -115,6 +146,45 @@ const resumed = await LineageGuardSession.resume(
 );
 ```
 
+Run the dependency-free reference workflows:
+
+```bash
+pnpm demo:agent
+pnpm demo:otel
+pnpm demo:semantic
+```
+
+The first demo attempts to send an email, LineageGuard blocks the tool before
+execution, and the final count remains `Emails actually sent: 0`.
+
+See [docs/agent-runtime-integration.md](./docs/agent-runtime-integration.md)
+for the interception contract and integration patterns.
+
+## Optional semantic judge
+
+The deterministic families cannot catch a paraphrase that flips meaning
+without touching a number, hedge word, negation, or protected action. The
+runtime SDK therefore accepts an optional asynchronous `semanticJudge` —
+typically an LLM call — that reviews each proposed handoff before the
+deterministic gate:
+
+```ts
+const guard = new LineageGuardSession({
+  semanticJudge: async ({ from, proposedOutput }) => {
+    const verdict = await llmReview(from.text, proposedOutput);
+    return verdict.changed
+      ? [{ severity: verdict.severity, title: verdict.title, explanation: verdict.reason }]
+      : null;
+  },
+});
+```
+
+Judge findings are merged into the report as inspectable meaning-family
+issues and persist through snapshots. If the judge itself fails, the handoff
+fails closed by default (`semanticJudgeFailureMode: "warn"` downgrades that to
+a visible low-severity note). The core stays dependency-free: no judge, no
+model call. Run the executable demo with `pnpm demo:semantic`.
+
 ## Analyze branches and merges
 
 Use `LineageGuardGraphRun` for parallel roots, branches, and merge nodes:
@@ -165,19 +235,6 @@ Root model spans must contain `gen_ai.input.messages`,
 closed rather than treating a model output as authoritative evidence. GenAI
 content attributes can contain sensitive data; keep collection and retention
 under the host system's privacy policy.
-
-Run the dependency-free reference workflow:
-
-```bash
-pnpm demo:agent
-pnpm demo:otel
-```
-
-It attempts to send an email, LineageGuard blocks the tool before execution,
-and the final count remains `Emails actually sent: 0`.
-
-See [docs/agent-runtime-integration.md](./docs/agent-runtime-integration.md)
-for the interception contract and integration patterns.
 
 ## Connect another language or framework
 
@@ -241,7 +298,7 @@ pnpm run verify
 
 `pnpm run verify` is the same release gate used by GitHub Actions. It performs lint,
 type checks, detector/runtime/OTLP tests, a production build, rendered API
-checks, the curated regression evaluation, both executable demos, and a real
+checks, the curated regression evaluation, the executable demos, and a real
 tarball install in an isolated consumer project.
 
 Individual commands:
@@ -256,12 +313,21 @@ pnpm build
 pnpm test:render
 ```
 
-The current `curated-regression-v1` set contains 26 deliberately small
-positive and negative cases. It currently measures 100% precision, recall,
-specificity, and expected-signal coverage with a 0% false-positive rate at the
-medium threshold. These are regression-set results, not a claim about unseen
-production traffic. Add real anonymized traces as integrations expose new
-language and policy patterns.
+The current `curated-regression-v2` set contains 38 deliberately small
+positive and negative cases, including equivalence rewrites that must stay
+clean and Korean-language mutations that must block:
+
+| Metric | Result |
+| --- | --- |
+| Precision | 100% |
+| Recall | 100% |
+| Specificity | 100% |
+| Expected-signal coverage | 100% |
+| False-positive rate | 0% |
+
+These are regression-set results at the medium threshold, **not** a claim
+about unseen production traffic. Add real anonymized traces as integrations
+expose new language and policy patterns.
 
 ## Package and release safety
 
@@ -293,11 +359,13 @@ service is required for local use.
 
 ## Privacy and cost
 
-- **API cost:** $0.
-- **Network during analysis:** none.
-- **Storage:** trace input stays in React state and is not written to a server.
-- **Import:** JSON files are parsed locally and limited to 2 MB in the UI.
-- **Export:** reports, recovery packets, and JSON are generated locally.
+| Concern | Answer |
+| --- | --- |
+| API cost | $0 |
+| Network during analysis | None |
+| Storage | Trace input stays in React state; nothing is written to a server |
+| Import | JSON files are parsed locally and limited to 2 MB in the UI |
+| Export | Reports, recovery packets, and JSON are generated locally |
 
 Installing the open-source development dependencies may use the network. That
 is separate from analyzing a trace.
@@ -306,9 +374,14 @@ is separate from analyzing a trace.
 
 LineageGuard is a smoke detector, not a truth machine. It catches explicit
 structural mutations but can miss subtle paraphrases, sarcasm, and a false
-claim that remains unchanged. It can also warn on a harmless rewrite. Domain
-teams can add inspectable `CustomLineageRule` extensions without replacing the
-baseline engine.
+claim that remains unchanged. It can also warn on a harmless rewrite. The
+meaning and authority lexicons currently cover English and Korean; other
+languages raise a coverage signal rather than a verdict, and Latin-script
+languages other than English are not distinguished by the coverage check.
+Number canonicalization interprets bare `k` and currency-prefixed `m`/`b`
+magnitudes, complete dates, and common metric units; ambiguous partial forms
+stay literal. Domain teams can add inspectable `CustomLineageRule` extensions
+without replacing the baseline engine.
 
 Human confirmation is therefore part of the product, not hidden in fine print.
 Do not use the current rules as a replacement for source verification,
@@ -346,6 +419,7 @@ evals/
 examples/
   guarded-agent-runtime.ts  Executable non-web integration
   otel-ingestion.ts      Executable OTLP integration
+  semantic-judge.ts      Executable optional-judge integration
 docs/
   agent-runtime-integration.md  Runtime interception guide
   releasing.md           Maintainer release checklist
@@ -354,7 +428,7 @@ tests/
   analysis.test.ts       Detection behavior
   pipeline.test.ts       Graph, modules, and recovery behavior
   sdk.test.ts            Runtime SDK behavior
-  runtime.test.ts        Live blocking and tool enforcement
+  runtime.test.ts        Live blocking, tool enforcement, semantic judge
   trace-schema.test.ts   Import validation
   rendered-html.test.mjs Production render and health smoke tests
 ```
@@ -364,4 +438,4 @@ The design boundaries and runtime flow are documented in
 
 ## License
 
-MIT
+[MIT](./LICENSE)

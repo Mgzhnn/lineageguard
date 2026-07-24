@@ -22,7 +22,8 @@ export type RuntimeEventType =
   | "tool-blocked"
   | "recovery-applied"
   | "run-completed"
-  | "agent-failed";
+  | "agent-failed"
+  | "semantic-judge-failed";
 
 export type RuntimeEvent = {
   type: RuntimeEventType;
@@ -80,6 +81,39 @@ export type GuardedToolClient = {
   ): Promise<TResult>;
 };
 
+export type SemanticJudgeFinding = {
+  severity: Severity;
+  title: string;
+  explanation: string;
+};
+
+export type SemanticJudgeContext = {
+  sessionId: string;
+  runName: string;
+  guardrail: string;
+  transitionIndex: number;
+  from: TraceStage;
+  proposedOutput: string;
+  agentId: string;
+  agentName: string;
+};
+
+/**
+ * Optional asynchronous reviewer for a proposed handoff — typically an LLM
+ * call — that runs before the deterministic gate. Findings it returns are
+ * merged into the reliability report as inspectable meaning-family issues.
+ * Judge findings apply through `runAgent`/`runSequence`; the synchronous
+ * `inspectHandoff` path stays deterministic-only.
+ */
+export type SemanticJudge = (
+  context: Readonly<SemanticJudgeContext>,
+) =>
+  | SemanticJudgeFinding[]
+  | null
+  | Promise<SemanticJudgeFinding[] | null>;
+
+export const SEMANTIC_JUDGE_RULE_ID = "lineageguard:semantic-judge";
+
 export type LineageGuardSessionOptions = {
   sessionId?: string;
   runName?: string;
@@ -88,6 +122,14 @@ export type LineageGuardSessionOptions = {
   toolPolicy?: ToolPolicy;
   rules?: readonly CustomLineageRule[];
   approvalVerifier?: ToolApprovalVerifier;
+  semanticJudge?: SemanticJudge;
+  /**
+   * What happens when the semantic judge itself throws or rejects.
+   * "block" (default) records a high-severity finding so the handoff fails
+   * closed; "warn" records a low-severity finding and lets the deterministic
+   * gate decide alone.
+   */
+  semanticJudgeFailureMode?: "block" | "warn";
   tools?: readonly RegisteredTool[];
   exposeSessionToAgents?: boolean;
   onEvent?: (event: RuntimeEvent) => void;
@@ -175,6 +217,11 @@ export type LineageGuardSessionSnapshot = {
   toolExecutions: PersistedToolExecution[];
   handoffRequests: PersistedHandoffRequest[];
   eventSequence: number;
+  /** Accepted semantic-judge findings, keyed by transition index. */
+  semanticFindings?: Array<{
+    transitionIndex: number;
+    findings: SemanticJudgeFinding[];
+  }>;
 };
 
 export type LineageGuardSnapshotStore = {
@@ -186,6 +233,8 @@ export type LineageGuardRestoreOptions = Pick<
   LineageGuardSessionOptions,
   | "rules"
   | "approvalVerifier"
+  | "semanticJudge"
+  | "semanticJudgeFailureMode"
   | "tools"
   | "onEvent"
   | "onEventError"
@@ -332,6 +381,31 @@ function normalizeRules(rules: readonly CustomLineageRule[] = []) {
   return normalized;
 }
 
+function validateSemanticFinding(
+  finding: SemanticJudgeFinding,
+): SemanticJudgeFinding {
+  if (
+    !finding ||
+    typeof finding !== "object" ||
+    (finding.severity !== "low" &&
+      finding.severity !== "medium" &&
+      finding.severity !== "high") ||
+    typeof finding.title !== "string" ||
+    !finding.title.trim() ||
+    typeof finding.explanation !== "string" ||
+    !finding.explanation.trim()
+  ) {
+    throw new Error(
+      "A semantic judge finding needs a low/medium/high severity, a title, and an explanation.",
+    );
+  }
+  return {
+    severity: finding.severity,
+    title: finding.title.trim(),
+    explanation: finding.explanation.trim(),
+  };
+}
+
 function validateSnapshot(snapshot: LineageGuardSessionSnapshot) {
   if (!snapshot || typeof snapshot !== "object") {
     throw new Error("A LineageGuard session snapshot is required.");
@@ -474,6 +548,27 @@ function validateSnapshot(snapshot: LineageGuardSessionSnapshot) {
   if (!Array.isArray(snapshot.handoffRequests)) {
     throw new Error("Snapshot handoff requests must be an array.");
   }
+  if (snapshot.semanticFindings !== undefined) {
+    if (!Array.isArray(snapshot.semanticFindings)) {
+      throw new Error("Snapshot semantic findings must be an array.");
+    }
+    const findingIndexes = new Set<number>();
+    snapshot.semanticFindings.forEach((entry) => {
+      if (
+        !entry ||
+        typeof entry !== "object" ||
+        !Number.isInteger(entry.transitionIndex) ||
+        entry.transitionIndex < 0 ||
+        entry.transitionIndex >= snapshot.stages.length - 1 ||
+        findingIndexes.has(entry.transitionIndex) ||
+        !Array.isArray(entry.findings)
+      ) {
+        throw new Error("Snapshot contains invalid semantic findings.");
+      }
+      findingIndexes.add(entry.transitionIndex);
+      entry.findings.forEach((finding) => validateSemanticFinding(finding));
+    });
+  }
   const handoffKeys = new Set<string>();
   snapshot.handoffRequests.forEach((record) => {
     if (
@@ -536,6 +631,9 @@ export class LineageGuardSession {
   private readonly toolPolicy: ToolPolicy;
   private readonly rules: readonly CustomLineageRule[];
   private readonly approvalVerifier?: ToolApprovalVerifier;
+  private readonly semanticJudge?: SemanticJudge;
+  private readonly semanticJudgeFailureMode: "block" | "warn";
+  private readonly semanticFindings = new Map<number, SemanticJudgeFinding[]>();
   private readonly exposeSessionToAgents: boolean;
   private readonly onEvent?: (event: RuntimeEvent) => void;
   private readonly onEventError?: (
@@ -559,7 +657,30 @@ export class LineageGuardSession {
     this.blockAtOrAbove = normalizeBlockingThreshold(options.blockAtOrAbove);
     this.toolPolicy = cloneToolPolicy(options.toolPolicy ?? {});
     this.rules = normalizeRules(options.rules);
+    if (
+      this.rules.some((rule) => rule.id.trim() === SEMANTIC_JUDGE_RULE_ID)
+    ) {
+      throw new Error(
+        `The rule id "${SEMANTIC_JUDGE_RULE_ID}" is reserved for the semantic judge.`,
+      );
+    }
     this.approvalVerifier = options.approvalVerifier;
+    if (
+      options.semanticJudge !== undefined &&
+      typeof options.semanticJudge !== "function"
+    ) {
+      throw new Error("The semantic judge must be a function.");
+    }
+    this.semanticJudge = options.semanticJudge;
+    if (
+      options.semanticJudgeFailureMode !== undefined &&
+      options.semanticJudgeFailureMode !== "block" &&
+      options.semanticJudgeFailureMode !== "warn"
+    ) {
+      throw new Error("Semantic judge failure mode must be block or warn.");
+    }
+    this.semanticJudgeFailureMode =
+      options.semanticJudgeFailureMode ?? "block";
     if (
       options.exposeSessionToAgents !== undefined &&
       typeof options.exposeSessionToAgents !== "boolean"
@@ -691,6 +812,7 @@ export class LineageGuardSession {
         guard: this.exposeSessionToAgents ? this : undefined,
         tools: this.getToolClient(),
       });
+      await this.applySemanticJudge(agent.id, agent.name, output);
       return this.inspectHandoff(agent.id, agent.name, output);
     } catch (error) {
       this.emit(
@@ -1028,6 +1150,11 @@ export class LineageGuardSession {
     for (const [key, request] of this.handoffRequests) {
       if (!retainedIds.has(request.stageId)) this.handoffRequests.delete(key);
     }
+    for (const transitionIndex of [...this.semanticFindings.keys()]) {
+      if (transitionIndex >= this.stages.length - 1) {
+        this.semanticFindings.delete(transitionIndex);
+      }
+    }
     this.frozen = false;
     this.latestReport = this.runPipeline(this.stages, null);
     const checkpoint = this.lastStage();
@@ -1076,6 +1203,16 @@ export class LineageGuardSession {
         ...request,
       })),
       eventSequence: this.eventSequence,
+      ...(this.semanticFindings.size
+        ? {
+            semanticFindings: [...this.semanticFindings.entries()].map(
+              ([transitionIndex, findings]) => ({
+                transitionIndex,
+                findings: findings.map((finding) => ({ ...finding })),
+              }),
+            ),
+          }
+        : {}),
     };
   }
 
@@ -1115,6 +1252,12 @@ export class LineageGuardSession {
     });
     session.stages = snapshot.stages.map((stage) => ({ ...stage }));
     session.frozen = snapshot.frozen;
+    snapshot.semanticFindings?.forEach((entry) =>
+      session.semanticFindings.set(
+        entry.transitionIndex,
+        entry.findings.map((finding) => ({ ...finding })),
+      ),
+    );
     session.latestReport = session.runPipeline(
       session.stages,
       snapshot.frozen ? snapshot.recoveryTransitionIndex : null,
@@ -1163,13 +1306,86 @@ export class LineageGuardSession {
     return this.frozen;
   }
 
+  /**
+   * Runs the configured semantic judge on a proposed handoff and stores the
+   * accepted findings. They are replayed into every subsequent pipeline run
+   * through a reserved built-in rule, so reports stay reproducible.
+   */
+  private async applySemanticJudge(
+    agentId: string,
+    agentName: string,
+    output: unknown,
+  ) {
+    if (!this.semanticJudge) return;
+    if (typeof output !== "string" || !output.trim()) return;
+    const transitionIndex = this.stages.length - 1;
+    try {
+      const findings = await this.semanticJudge(
+        Object.freeze({
+          sessionId: this.sessionId,
+          runName: this.runName,
+          guardrail: this.guardrail,
+          transitionIndex,
+          from: { ...this.lastStage() },
+          proposedOutput: output,
+          agentId: agentId.trim(),
+          agentName: agentName.trim(),
+        }),
+      );
+      const validated = (findings ?? []).map(validateSemanticFinding);
+      if (validated.length) {
+        this.semanticFindings.set(transitionIndex, validated);
+      } else {
+        this.semanticFindings.delete(transitionIndex);
+      }
+    } catch (error) {
+      const failClosed = this.semanticJudgeFailureMode === "block";
+      const message =
+        error instanceof Error ? error.message : "Unknown judge failure.";
+      this.semanticFindings.set(transitionIndex, [
+        {
+          severity: failClosed ? "high" : "low",
+          title: "Semantic judge unavailable",
+          explanation: failClosed
+            ? `The configured semantic judge failed (${message}). Failing closed: this handoff needs human review before downstream agents run.`
+            : `The configured semantic judge failed (${message}). The deterministic rule families still apply, but semantic drift was not reviewed for this handoff.`,
+        },
+      ]);
+      this.emit(
+        "semantic-judge-failed",
+        `${agentName.trim()}: ${message}`,
+        agentId.trim(),
+      );
+    }
+  }
+
+  private semanticReplayRule(): CustomLineageRule {
+    return {
+      id: SEMANTIC_JUDGE_RULE_ID,
+      family: "meaning",
+      evaluate: ({ transitionIndex }) => {
+        const findings = this.semanticFindings.get(transitionIndex);
+        if (!findings?.length) return null;
+        return findings.map((finding, index) => ({
+          id: `${transitionIndex}-${index + 1}`,
+          severity: finding.severity,
+          title: finding.title,
+          explanation: finding.explanation,
+        }));
+      },
+    };
+  }
+
   private runPipeline(
     stages: TraceStage[],
     recoveryTransitionIndex?: number | null,
   ) {
+    const rules = this.semanticFindings.size
+      ? [...this.rules, this.semanticReplayRule()]
+      : this.rules;
     return runReliabilityPipeline(stages, this.guardrail, {
       recoveryTransitionIndex,
-      rules: this.rules,
+      rules,
     });
   }
 
