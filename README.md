@@ -5,14 +5,17 @@ agent handoffs. It records what each agent received and produced, finds the
 first handoff where evidence, meaning, or authority changed, shows the
 downstream blast radius, and prepares the smallest safe retry.
 
-It is one product with three usable surfaces:
+It is one product with four usable surfaces:
 
-- a runtime supervisor that blocks unsafe handoffs before downstream agents run;
-- a pre-tool gate that prevents unapproved external side effects;
+- a resumable runtime supervisor that blocks unsafe handoffs before downstream
+  agents run;
+- a host-owned tool registry with scoped, one-time approvals and idempotency;
+- chain and branch/merge DAG analyzers;
 - a visual forensic workspace and framework-neutral HTTP/JSON adapter.
 
-No model API, API key, account, database, analytics service, or paid service is
-required. Analysis is deterministic and runs locally.
+No model API, account, database, analytics service, or paid service is required
+for local analysis. A public hosted evaluation endpoint fails closed until
+workspace identity or tenant bearer credentials are configured.
 
 ## What the pipeline does
 
@@ -52,12 +55,21 @@ clinical, customer-support, and clean-chain examples.
 ## Instrument an agent runtime
 
 ```ts
-import { LineageGuardSession } from "./sdk/index.ts";
+import { LineageGuardSession } from "@lineageguard/sdk";
 
 const guard = new LineageGuardSession({
   runName: "Customer support run",
   guardrail: "Draft only. Do not contact the customer.",
   blockAtOrAbove: "medium",
+  approvalVerifier: approvalService.verify,
+  tools: [
+    {
+      name: "send-email",
+      action: "Send customer response",
+      sideEffect: true,
+      execute: emailProvider.send,
+    },
+  ],
 }).recordSource("Customer request", sourceText);
 
 const result = await guard.runSequence(agents, applicationContext);
@@ -68,23 +80,57 @@ if (result.status === "blocked") {
 }
 ```
 
-An agent that can call tools must receive the guard and use its executor:
+Agents receive the restricted registered-tool client. The host owns the
+implementation and side-effect classification:
 
 ```ts
-await guard.executeTool(
-  {
-    toolName: "send-email",
-    action: "Send customer response",
-    input: email,
-    sideEffect: true,
-    approvedBy: humanApproval?.reviewer,
+await tools.execute("send-email", email, {
+  approval: {
+    token: humanApproval.token,
+    approvedBy: humanApproval.reviewer,
   },
-  (approvedEmail) => emailProvider.send(approvedEmail),
+  idempotencyKey: `send:${messageId}`,
+});
+```
+
+The callback is never called when policy denies the tool, the approval is
+missing or invalid, the token was already consumed, or the idempotency key was
+used for another operation.
+
+Persist a session through any durable adapter:
+
+```ts
+await guard.checkpoint(snapshotStore);
+const resumed = await LineageGuardSession.resume(
+  snapshotStore,
+  guard.sessionId,
+  { approvalVerifier: approvalService.verify, tools },
 );
 ```
 
-The second callback is never called when the tool is denied or still needs
-approval. This is enforcement inside the workflow, not post-run reporting.
+## Analyze branches and merges
+
+Use `LineageGuardGraphRun` for parallel roots, branches, and merge nodes:
+
+```ts
+const report = new LineageGuardGraphRun()
+  .recordRoot("facts", "Facts", facts)
+  .recordRoot("policy", "Policy", policy)
+  .recordHandoff(
+    "merge",
+    "Merge agent",
+    mergedOutput,
+    ["facts", "policy"],
+    {
+      facts: factsClaimInMergedOutput,
+      policy: policyClaimInMergedOutput,
+    },
+  )
+  .finalize();
+```
+
+Per-parent claim projections prevent a merge from comparing unrelated
+documents as though they were one linear rewrite.
 
 Run the dependency-free reference workflow:
 
@@ -107,8 +153,16 @@ before handing the proposed output to the next agent:
 POST /api/evaluate
 ```
 
-The response contains `decision: "allow" | "block"`, the blocking transition,
-and a recovery packet. The endpoint is stateless and uses the same engine.
+The response contains `decision: "allow" | "block"`, the blocking transition
+or graph edge, and a recovery packet. Chain payloads use schema `1.0`; graph
+payloads use schema `1.1`. The endpoint is stateless and uses the same engine.
+
+Loopback development works without credentials. Hosted access requires either
+an explicitly trusted workspace-authenticated user header
+(`LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY=true` behind a header-sanitizing
+dispatcher) or `LINEAGEGUARD_API_KEYS_JSON` plus `x-lineageguard-tenant` and a
+bearer token. Per-tenant isolate limits are configured with
+`LINEAGEGUARD_RATE_LIMIT_PER_MINUTE`.
 
 Tool execution should still be wrapped locally in the host process: once an
 opaque framework has already executed a tool, no external monitor can undo it.
@@ -160,6 +214,7 @@ Individual commands:
 ```bash
 pnpm test:engine
 pnpm typecheck
+pnpm test:sdk-package
 pnpm build
 pnpm test:render
 ```
@@ -192,33 +247,40 @@ is separate from analyzing a trace.
 ## Honest limitations
 
 LineageGuard is a smoke detector, not a truth machine. It catches explicit
-structural mutations but can miss subtle paraphrases, domain-specific meaning,
-sarcasm, and a false claim that remains unchanged throughout the chain. It can
-also warn on a harmless rewrite.
+structural mutations but can miss subtle paraphrases, sarcasm, and a false
+claim that remains unchanged. It can also warn on a harmless rewrite. Domain
+teams can add inspectable `CustomLineageRule` extensions without replacing the
+baseline engine.
 
 Human confirmation is therefore part of the product, not hidden in fine print.
 Do not use the current rules as a replacement for source verification,
 compliance review, medical judgment, or safety approval.
 
-The current runtime is also deliberately serial and in-memory. It does not yet
-model parallel DAG branches, provide durable crash recovery, authenticate
-reviewer identities, or add tenant authentication and quotas to the optional
-HTTP adapter. The host orchestrator owns those production boundaries.
+The live `LineageGuardSession` remains a serial state machine even though DAG
+analysis is supported. Snapshot durability, distributed locks, globally
+coordinated quotas, authenticated approval issuance, and preventing code from
+bypassing the registered tool boundary remain host responsibilities.
 
 ## Project structure
 
 ```text
 app/
   LineageGuard.tsx       Interactive control plane
+  lineageguard/          Workspace controller hook
   api/health/route.ts    Deployment health contract
   api/evaluate/route.ts  Framework-neutral handoff gate
 lib/
   analysis.ts            Dependency-free mutation detector
+  graph.ts               DAG validation, analysis, and recovery
+  fingerprint.ts         Canonical SHA-256 run fingerprints
+  api-security.ts        Tenant auth and per-isolate quotas
   pipeline.ts            Seven-module reliability pipeline and recovery
   trace-schema.ts        Generic JSON validation and normalization
 sdk/
   index.ts               Runtime instrumentation API
   runtime.ts             Agent, handoff, tool, and recovery supervisor
+  graph.ts               DAG builder API
+  package.json           Publishable @lineageguard/sdk manifest
 examples/
   guarded-agent-runtime.ts  Executable non-web integration
 docs/

@@ -39,7 +39,10 @@ source + protected instruction
 All entry surfaces execute the same reliability engine:
 
 - `LineageGuardSession` supervises a live agent loop;
-- `executeTool` authorizes a tool before invoking its implementation;
+- its registered tool client authorizes a host-owned implementation before
+  invocation;
+- `LineageGuardGraphRun` and `runReliabilityGraphPipeline` analyze branches,
+  merges, and multi-parent claims;
 - `POST /api/evaluate` serves non-TypeScript runtimes;
 - the interactive workspace visualizes the resulting trace and recovery;
 - the JSON adapter normalizes external events into stages.
@@ -64,9 +67,15 @@ handoff. Adjacent stages become directed graph edges. Detected changes belong
 to an edge, which lets the system identify the first failure instead of merely
 judging the final answer.
 
-The current topology is intentionally a single ordered chain. Event imports
-normalize repeated agent executions into unique stage-instance IDs so the graph
-cannot contain ambiguous nodes.
+The v1.0 contract is an ordered chain. Event imports normalize repeated agent
+executions into unique stage-instance IDs so the graph cannot contain ambiguous
+nodes.
+
+The v1.1 graph contract adds `parentIds` and optional `inheritedClaims`.
+`inheritedClaims[parentId]` projects a merge output onto the claim inherited
+from that parent, avoiding meaningless whole-document comparisons between
+unrelated branches. Graphs are topologically sorted, missing parents and cycles
+are rejected, and contamination follows descendants rather than array order.
 
 ## Rule families
 
@@ -93,14 +102,17 @@ The third point is essential. If a framework keeps tools inside an opaque
 executor, it must expose middleware or receive wrapped tool functions. Reading
 “email sent” from the final response is too late to prevent the email.
 
-Read-only tools are allowed by default. Side-effecting tools require a named
-human approval by default. Host policy can classify known tools as
-side-effecting even when a caller labels them incorrectly. Explicit deny rules
-always win.
+Read-only tools are allowed by default. Side-effecting tools fail closed unless
+host policy explicitly allows them or `approvalVerifier` validates a scoped
+token. The verifier receives the session, run, tool, action, authenticated
+reviewer, and SHA-256 input fingerprint. Accepted tokens are consumed once.
+The legacy `approvedBy` string is not authorization.
 
-`approvedBy` is an attestation supplied by the host runtime, not an identity
-provider. A production host must derive it from its authenticated approval
-system rather than from model output or arbitrary request data.
+Hosts can register tool implementations and give agents the restricted
+`GuardedToolClient`. The full session is not exposed to agent callbacks by
+default. That keeps side-effect classification, registration, approval state,
+and executable callbacks out of model-controlled data. Explicit deny rules
+always win.
 
 ## Recovery semantics
 
@@ -119,6 +131,13 @@ but do not create a rollback packet:
 runtime, the packet remains plain data that its queue or retry controller can
 apply. LineageGuard never silently approves external actions.
 
+Sessions support idempotency keys for handoffs and tools. `toSnapshot()`,
+`checkpoint(store)`, `restore()`, and `resume()` make state resumable through a
+host-provided durable adapter. Snapshots retain consumed-approval fingerprints,
+recovery state, event sequence, and execution idempotency records without
+storing raw approval tokens. Restore also requires exact custom-rule ID parity,
+preventing a resumed session from silently changing its detector policy.
+
 ## Trust boundaries
 
 - Imported files and API bodies are capped at 2,000,000 bytes.
@@ -128,34 +147,39 @@ apply. LineageGuard never silently approves external actions.
 - The in-process detector makes no network request and needs no secret.
 - The optional server is stateless and does not persist trace contents.
 - Evaluation responses declare `Cache-Control: no-store`.
-- Side-effecting tools require approval by default in the runtime SDK.
+- Public evaluation fails closed unless the request has authenticated workspace
+  identity or a configured tenant bearer key.
+- Evaluation requests are rate-limited per tenant inside each server isolate.
+- Side-effecting tools require verifier-backed approval by default.
 - Tools are blocked until an authoritative source has been recorded.
 - Explicit deny rules override a supplied approval.
+- Run receipts use a full SHA-256 content fingerprint; the display ID is a
+  64-bit prefix and is not used as authorization.
 - Human verdicts remain visible because deterministic rules can be wrong.
 
 ## Known production boundaries
 
-- The lineage model is a chain, not a DAG. Parallel branches, merges, and
-  multi-parent claims need an explicit graph contract before they can be
-  supervised safely.
-- Runtime sessions are in memory. Crash recovery, distributed locks, durable
-  approvals, and resumable checkpoints belong in the host orchestrator.
-- The public HTTP adapter has no tenant authentication, quotas, or audit store.
-  A shared deployment needs an authenticated gateway, rate limiting, tenant
-  isolation, and a retention policy.
 - Detection is lexical and deterministic. It does not verify whether the
   source itself is true, align every paraphrase semantically, or understand
-  domain-specific units and policy language.
+  every domain-specific unit and policy language. Custom rules can extend the
+  three inspectable families but remain responsible for their own quality.
 - The SDK assumes the host owns the actual tool boundary. Code that can bypass
   the wrapper can also bypass LineageGuard.
-- A `LineageGuardSession` is a serial state machine. Concurrent handoffs should
-  use separate sessions until branch-aware concurrency is implemented.
+- A `LineageGuardSession` is a serial state machine. DAG analysis is supported,
+  but a concurrent scheduler must still map branch execution and locks to the
+  graph contract.
+- Snapshot durability is only as strong as the supplied store. Distributed
+  locking, transactional outboxes, and approval issuance remain host concerns.
+- Built-in API quotas are per isolate. A high-scale multi-region deployment
+  still needs a globally coordinated gateway limit and an explicit audit
+  retention policy.
 
 ## Extension points
 
-Additional rules should produce the existing issue shape and attach to a
-specific transition. A future semantic detector can be optional, but it should
-not remove the free deterministic baseline or invent a confidence score.
+Additional rules implement `CustomLineageRule`, choose one of the evidence,
+meaning, or authority families, and return findings for a specific edge. A
+semantic or domain detector can therefore be optional without replacing the
+free deterministic baseline or inventing a confidence score.
 
 Agent frameworks can integrate through callbacks or submit the generic JSON
 contract from any language. Recovery remains plain data so a host runtime can
@@ -163,7 +187,8 @@ map it to its own queues, approvals, and retry system.
 
 ## Deployment shape
 
-The SDK runs in-process and does not require the website. The optional stateless
-Vinext service exposes `GET /api/health` and `POST /api/evaluate`. There is no
-database or object-storage binding. The same engine runs locally, in a worker,
-or inside the host agent process.
+The compiled dependency-free SDK runs in-process and does not require the
+website. The optional stateless Vinext service exposes `GET /api/health` and
+`POST /api/evaluate` for both chain and graph payloads. There is no database or
+object-storage binding. Authentication secrets remain runtime configuration,
+and durable session stores remain host adapters.

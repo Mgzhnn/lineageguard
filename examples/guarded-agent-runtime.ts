@@ -13,6 +13,17 @@ const guard = new LineageGuardSession({
   runName: "Customer support workflow",
   guardrail: "Draft only. Do not send an email without human approval.",
   blockAtOrAbove: "medium",
+  tools: [
+    {
+      name: "send-email",
+      action: "Send credit email",
+      sideEffect: true,
+      execute: (body: string) => {
+        context.sentEmails.push(body);
+        return { sent: true };
+      },
+    },
+  ],
   onEvent: (event) => {
     console.log(`[${event.type}] ${event.message}`);
   },
@@ -31,19 +42,10 @@ const agents: GuardedAgent<DemoContext>[] = [
   {
     id: "action-agent",
     name: "Action agent",
-    execute: async ({ context: state, guard: runtime }) => {
-      await runtime.executeTool(
-        {
-          toolName: "send-email",
-          action: "Send credit email",
-          input: "15% credit email",
-          sideEffect: true,
-        },
-        (body) => {
-          state.sentEmails.push(body);
-          return { sent: true };
-        },
-      );
+    execute: async ({ tools }) => {
+      await tools.execute("send-email", "15% credit email", {
+        idempotencyKey: "demo-send-email",
+      });
       return "The email was sent.";
     },
   },

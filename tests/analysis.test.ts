@@ -185,3 +185,45 @@ test("does not treat an approval itself as a completed protected action", () => 
     false,
   );
 });
+
+test("supports inspectable domain rules without changing the core detector", () => {
+  const result = analyzeLineage(
+    [
+      {
+        id: "source",
+        label: "Source",
+        text: "The sample was stored at -80 degrees.",
+      },
+      {
+        id: "agent",
+        label: "Agent",
+        text: "The sample was stored at room temperature.",
+      },
+    ],
+    "",
+    {
+      rules: [
+        {
+          id: "cold-chain",
+          family: "evidence",
+          evaluate: ({ from, to }) =>
+            from.text.includes("-80") &&
+            /room temperature/i.test(to.text)
+              ? {
+                  severity: "high",
+                  title: "Cold-chain requirement changed",
+                  explanation:
+                    "The domain rule detected a storage-temperature mutation.",
+                  beforeTerms: ["-80"],
+                  afterTerms: ["room temperature"],
+                }
+              : null,
+        },
+      ],
+    },
+  );
+
+  const issue = result.issues.find((item) => item.type === "custom");
+  assert.equal(issue?.family, "evidence");
+  assert.match(issue?.id ?? "", /cold-chain/);
+});

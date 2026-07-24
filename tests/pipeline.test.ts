@@ -26,8 +26,9 @@ test("runs the complete reliability pipeline around one first break", () => {
     "Do not publish without human approval.",
   );
 
-  assert.match(run.id, /^RUN-[A-F0-9]{8}$/);
-  assert.equal(run.version, "0.3");
+  assert.match(run.id, /^RUN-[A-F0-9]{16}$/);
+  assert.match(run.fingerprint, /^SHA256-[A-F0-9]{64}$/);
+  assert.equal(run.version, "0.4");
   assert.equal(run.graph.nodes.length, 3);
   assert.equal(run.graph.edges.length, 2);
   assert.equal(run.graph.nodes[2].state, "first-break");

@@ -1,4 +1,9 @@
 import type { Severity } from "@/lib/analysis";
+import { authorizeEvaluationRequest } from "@/lib/api-security";
+import {
+  parseTraceGraphPayload,
+  runReliabilityGraphPipeline,
+} from "@/lib/graph";
 import { runReliabilityPipeline } from "@/lib/pipeline";
 import {
   parseTracePayload,
@@ -84,9 +89,56 @@ export async function POST(request: Request) {
       );
     }
 
+    const access = authorizeEvaluationRequest(request);
+    if (!access.ok) {
+      return json(
+        { status: "error", error: access.error },
+        {
+          status: access.status,
+          headers:
+            access.retryAfterSeconds === undefined
+              ? undefined
+              : { "retry-after": `${access.retryAfterSeconds}` },
+        },
+      );
+    }
+
     const body = await readRequestText(request);
     const input: unknown = JSON.parse(body);
     const threshold = parseThreshold(input);
+    if (
+      isRecord(input) &&
+      input.schemaVersion === "1.1" &&
+      Array.isArray(input.nodes)
+    ) {
+      const graph = parseTraceGraphPayload(input);
+      const report = runReliabilityGraphPipeline(
+        graph.nodes,
+        graph.guardrail,
+        { blockAtOrAbove: threshold },
+      );
+      const blocked = report.firstBlockingEdgeId !== null;
+      return json(
+        {
+          status: "ok",
+          topology: "graph",
+          decision: blocked ? "block" : "allow",
+          threshold,
+          blockingEdgeId: report.firstBlockingEdgeId,
+          runId: report.id,
+          recovery: report.recovery,
+          report,
+        },
+        {
+          headers: {
+            "x-ratelimit-limit": `${access.limit}`,
+            "x-ratelimit-remaining": `${access.remaining}`,
+            "x-ratelimit-reset": `${Math.ceil(access.resetAt / 1_000)}`,
+          },
+        },
+      );
+    }
+
     const trace = parseTracePayload(input);
     const initialReport = runReliabilityPipeline(
       trace.stages,
@@ -105,16 +157,26 @@ export async function POST(request: Request) {
       ? report.analysis.transitions[blockingTransitionIndex]
       : report.analysis.transitions.at(-1) ?? null;
 
-    return json({
-      status: "ok",
-      decision: blocked ? "block" : "allow",
-      threshold,
-      blockingTransitionIndex: blocked ? blockingTransitionIndex : null,
-      transition,
-      runId: report.id,
-      recovery: report.recovery,
-      report,
-    });
+    return json(
+      {
+        status: "ok",
+        topology: "chain",
+        decision: blocked ? "block" : "allow",
+        threshold,
+        blockingTransitionIndex: blocked ? blockingTransitionIndex : null,
+        transition,
+        runId: report.id,
+        recovery: report.recovery,
+        report,
+      },
+      {
+        headers: {
+          "x-ratelimit-limit": `${access.limit}`,
+          "x-ratelimit-remaining": `${access.remaining}`,
+          "x-ratelimit-reset": `${Math.ceil(access.resetAt / 1_000)}`,
+        },
+      },
+    );
   } catch (error) {
     if (error instanceof RequestPayloadTooLargeError) {
       return json(

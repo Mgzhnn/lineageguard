@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "rootDir": "..",
+    "outDir": "./dist",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "./index.ts",
+    "./runtime.ts",
+    "./graph.ts",
+    "../lib/analysis.ts",
+    "../lib/fingerprint.ts",
+    "../lib/graph.ts",
+    "../lib/pipeline.ts",
+    "../lib/trace-schema.ts",
+    "../lib/version.ts"
+  ],
+  "exclude": ["./dist"]
+}

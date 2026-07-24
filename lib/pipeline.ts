@@ -2,11 +2,13 @@ import {
   analyzeLineage,
   getTraceSignalSnapshot,
   type AnalysisResult,
+  type CustomLineageRule,
   type IssueType,
   type Severity,
   type TraceSignalSnapshot,
   type TraceStage,
 } from "./analysis.ts";
+import { fingerprintValue } from "./fingerprint.ts";
 import { PIPELINE_VERSION } from "./version.ts";
 
 export type PipelineModuleId =
@@ -69,6 +71,7 @@ export type RecoveryPacket = {
 
 export type ReliabilityPipelineRun = {
   id: string;
+  fingerprint: string;
   version: typeof PIPELINE_VERSION;
   analysis: AnalysisResult;
   graph: {
@@ -87,24 +90,8 @@ export type ReliabilityPipelineRun = {
 
 export type ReliabilityPipelineOptions = {
   recoveryTransitionIndex?: number | null;
+  rules?: readonly CustomLineageRule[];
 };
-
-const issueFamily: Record<IssueType, "evidence" | "meaning" | "authority"> = {
-  number: "evidence",
-  certainty: "meaning",
-  quantifier: "meaning",
-  negation: "meaning",
-  guardrail: "authority",
-};
-
-function stableHash(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).toUpperCase().padStart(8, "0");
-}
 
 function unique<T>(items: T[]) {
   return [...new Set(items)];
@@ -217,7 +204,9 @@ export function runReliabilityPipeline(
   guardrail = "",
   options: ReliabilityPipelineOptions = {},
 ): ReliabilityPipelineRun {
-  const analysis = analyzeLineage(stages, guardrail);
+  const analysis = analyzeLineage(stages, guardrail, {
+    rules: options.rules,
+  });
   const firstBreakDestination =
     analysis.firstMutationIndex === null
       ? null
@@ -254,14 +243,14 @@ export function runReliabilityPipeline(
     },
   );
 
-  const numberIssues = analysis.issues.filter(
-    (issue) => issue.type === "number",
+  const evidenceIssues = analysis.issues.filter(
+    (issue) => issue.family === "evidence",
   );
-  const meaningIssues = analysis.issues.filter((issue) =>
-    ["certainty", "quantifier", "negation"].includes(issue.type),
+  const meaningIssues = analysis.issues.filter(
+    (issue) => issue.family === "meaning",
   );
   const authorityIssues = analysis.issues.filter(
-    (issue) => issue.type === "guardrail",
+    (issue) => issue.family === "authority",
   );
   const activeFamilies = unique(
     analysis.issues
@@ -270,7 +259,7 @@ export function runReliabilityPipeline(
           analysis.firstMutationIndex === null ||
           issue.transitionIndex === analysis.firstMutationIndex,
       )
-      .map((issue) => issueFamily[issue.type]),
+      .map((issue) => issue.family),
   );
   const firstBreakName =
     analysis.firstMutationIndex === null
@@ -311,11 +300,11 @@ export function runReliabilityPipeline(
       "evidence-sentinel",
       "Evidence Sentinel",
       "Protect numeric evidence, ranges, quantities, and units.",
-      ["number"],
-      numberIssues.length,
-      numberIssues.length
-        ? `${numberIssues.length} evidence mutation${
-            numberIssues.length === 1 ? "" : "s"
+      unique(evidenceIssues.map((issue) => issue.type)),
+      evidenceIssues.length,
+      evidenceIssues.length
+        ? `${evidenceIssues.length} evidence mutation${
+            evidenceIssues.length === 1 ? "" : "s"
           } found.`
         : "Numeric evidence stayed stable.",
     ),
@@ -323,7 +312,7 @@ export function runReliabilityPipeline(
       "meaning-sentinel",
       "Meaning Sentinel",
       "Detect confidence, scope, and negation changes.",
-      ["certainty", "quantifier", "negation"],
+      unique(meaningIssues.map((issue) => issue.type)),
       meaningIssues.length,
       meaningIssues.length
         ? `${meaningIssues.length} meaning boundary signal${
@@ -335,7 +324,7 @@ export function runReliabilityPipeline(
       "authority-firewall",
       "Authority Firewall",
       "Enforce inherited restrictions and human approvals.",
-      ["guardrail"],
+      unique(authorityIssues.map((issue) => issue.type)),
       authorityIssues.length,
       authorityIssues.length
         ? `${authorityIssues.length} authority violation${
@@ -371,14 +360,15 @@ export function runReliabilityPipeline(
     ),
   ];
 
-  const identity = stableHash(
-    `${guardrail}|${stages
-      .map((stage) => `${stage.label}:${stage.text}`)
-      .join("|")}`,
-  );
+  const fingerprint = fingerprintValue({
+    schema: "lineageguard-run/1",
+    guardrail,
+    stages: stages.map(({ id, label, text }) => ({ id, label, text })),
+  });
 
   return {
-    id: `RUN-${identity}`,
+    id: `RUN-${fingerprint.slice(0, 16).toUpperCase()}`,
+    fingerprint: `SHA256-${fingerprint.toUpperCase()}`,
     version: PIPELINE_VERSION,
     analysis,
     graph: {

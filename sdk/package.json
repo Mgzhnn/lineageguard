@@ -1,0 +1,43 @@
+{
+  "name": "@lineageguard/sdk",
+  "version": "0.4.0",
+  "description": "Deterministic claim-lineage analysis and runtime enforcement for AI agent handoffs.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/sdk/index.js",
+  "types": "./dist/sdk/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/sdk/runtime.d.ts",
+      "import": "./dist/sdk/runtime.js"
+    },
+    "./graph": {
+      "types": "./dist/sdk/graph.d.ts",
+      "import": "./dist/sdk/graph.js"
+    },
+    "./analysis": {
+      "types": "./dist/lib/analysis.d.ts",
+      "import": "./dist/lib/analysis.js"
+    },
+    "./pipeline": {
+      "types": "./dist/lib/pipeline.d.ts",
+      "import": "./dist/lib/pipeline.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  }
+}

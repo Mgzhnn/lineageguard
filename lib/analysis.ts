@@ -3,9 +3,11 @@ export type IssueType =
   | "certainty"
   | "quantifier"
   | "negation"
-  | "guardrail";
+  | "guardrail"
+  | "custom";
 
 export type Severity = "high" | "medium" | "low";
+export type IssueFamily = "evidence" | "meaning" | "authority";
 
 export type TraceStage = {
   id: string;
@@ -16,6 +18,7 @@ export type TraceStage = {
 export type LineageIssue = {
   id: string;
   type: IssueType;
+  family: IssueFamily;
   severity: Severity;
   transitionIndex: number;
   fromLabel: string;
@@ -49,6 +52,36 @@ export type TraceSignalSnapshot = {
   scopeRank: number | null;
   negations: string[];
   completedActions: string[];
+};
+
+export type CustomRuleFinding = {
+  id?: string;
+  severity: Severity;
+  title: string;
+  explanation: string;
+  beforeTerms?: string[];
+  afterTerms?: string[];
+};
+
+export type CustomLineageRuleContext = {
+  from: Readonly<TraceStage>;
+  to: Readonly<TraceStage>;
+  transitionIndex: number;
+  guardrail: string;
+  beforeSignals: TraceSignalSnapshot;
+  afterSignals: TraceSignalSnapshot;
+};
+
+export type CustomLineageRule = {
+  id: string;
+  family: IssueFamily;
+  evaluate: (
+    context: CustomLineageRuleContext,
+  ) => CustomRuleFinding | CustomRuleFinding[] | null;
+};
+
+export type AnalysisOptions = {
+  rules?: readonly CustomLineageRule[];
 };
 
 type RankedTerm = {
@@ -138,6 +171,15 @@ const severityWeight: Record<Severity | "clean", number> = {
   low: 1,
   medium: 2,
   high: 3,
+};
+
+export const ISSUE_FAMILY: Record<IssueType, IssueFamily> = {
+  number: "evidence",
+  certainty: "meaning",
+  quantifier: "meaning",
+  negation: "meaning",
+  guardrail: "authority",
+  custom: "meaning",
 };
 
 function normalize(text: string) {
@@ -265,6 +307,7 @@ function makeIssue(
   return {
     id: `${transitionIndex}-${type}-${title}`,
     type,
+    family: ISSUE_FAMILY[type],
     severity,
     transitionIndex,
     fromLabel: from.label,
@@ -274,6 +317,63 @@ function makeIssue(
     before: excerpt(from.text, beforeTerms),
     after: excerpt(to.text, afterTerms),
   };
+}
+
+function analyzeCustomRules(
+  from: TraceStage,
+  to: TraceStage,
+  transitionIndex: number,
+  guardrail: string,
+  rules: readonly CustomLineageRule[],
+) {
+  const issues: LineageIssue[] = [];
+  const context: CustomLineageRuleContext = {
+    from,
+    to,
+    transitionIndex,
+    guardrail,
+    beforeSignals: getTraceSignalSnapshot(from.text),
+    afterSignals: getTraceSignalSnapshot(to.text),
+  };
+
+  for (const rule of rules) {
+    const ruleId = rule.id.trim();
+    if (!ruleId) throw new Error("Custom lineage rule ids must be non-empty.");
+    const evaluated = rule.evaluate(context);
+    const findings = evaluated
+      ? Array.isArray(evaluated)
+        ? evaluated
+        : [evaluated]
+      : [];
+    findings.forEach((finding, findingIndex) => {
+      const title = finding.title.trim();
+      const explanation = finding.explanation.trim();
+      if (!title || !explanation) {
+        throw new Error(
+          `Custom lineage rule "${ruleId}" returned an incomplete finding.`,
+        );
+      }
+      issues.push({
+        ...makeIssue(
+          "custom",
+          finding.severity,
+          transitionIndex,
+          from,
+          to,
+          title,
+          explanation,
+          finding.beforeTerms ?? [],
+          finding.afterTerms ?? [],
+        ),
+        id: `${transitionIndex}-custom-${ruleId}-${
+          finding.id?.trim() || findingIndex + 1
+        }`,
+        family: rule.family,
+      });
+    });
+  }
+
+  return issues;
 }
 
 function analyzeTransition(
@@ -473,6 +573,7 @@ function highestSeverity(
 export function analyzeLineage(
   stages: TraceStage[],
   guardrail = "",
+  options: AnalysisOptions = {},
 ): AnalysisResult {
   const usableStages = stages.map((stage) => ({
     ...stage,
@@ -485,6 +586,15 @@ export function analyzeLineage(
     const to = usableStages[index + 1];
     if (!from.text || !to.text) continue;
     issues.push(...analyzeTransition(from, to, index));
+    issues.push(
+      ...analyzeCustomRules(
+        from,
+        to,
+        index,
+        guardrail,
+        options.rules ?? [],
+      ),
+    );
   }
 
   issues.push(...analyzeGuardrail(guardrail, usableStages));

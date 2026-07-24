@@ -99,3 +99,49 @@ type NormalizedTracePayload = {
 
 Call `parseTracePayload(payload)` to validate and normalize a value before
 passing it to the reliability pipeline.
+
+## Branch and merge graph format
+
+Schema `1.1` represents a DAG:
+
+```json
+{
+  "schemaVersion": "1.1",
+  "runName": "Research and policy merge",
+  "nodes": [
+    {
+      "id": "facts",
+      "label": "Facts",
+      "text": "Some users may save 5%.",
+      "parentIds": []
+    },
+    {
+      "id": "policy",
+      "label": "Policy",
+      "text": "Human approval is required.",
+      "parentIds": []
+    },
+    {
+      "id": "merge",
+      "label": "Merge agent",
+      "text": "Some users may save 5%. Human approval is required.",
+      "parentIds": ["facts", "policy"],
+      "inheritedClaims": {
+        "facts": "Some users may save 5%.",
+        "policy": "Human approval is required."
+      }
+    }
+  ]
+}
+```
+
+Graph node IDs must be unique. Parents must exist, self-parenting and cycles are
+rejected, and at least one root and one edge are required. `inheritedClaims` is
+optional for a single-parent rewrite. It is strongly recommended for merge
+nodes because it identifies the portion of the output inherited from each
+parent.
+
+Call `parseTraceGraphPayload(payload)` and
+`runReliabilityGraphPipeline(nodes, guardrail, options)`. The graph report
+returns topological order, edge-specific issues, branch-aware contamination,
+verified merge parents, and the exact retry node.

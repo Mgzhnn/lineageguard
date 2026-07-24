@@ -47,6 +47,15 @@ const guard = new LineageGuardSession({
   runName: "Research to publishing",
   guardrail: "Preserve uncertainty. Human approval before publishing.",
   blockAtOrAbove: "medium",
+  approvalVerifier: approvalService.verify,
+  tools: [
+    {
+      name: "publish-article",
+      action: "Publish final article",
+      sideEffect: true,
+      execute: publishingApi.publish,
+    },
+  ],
   onEvent: (event) => observability.write(event),
 }).recordSource("Research source", sourceText);
 
@@ -64,17 +73,14 @@ const agents: GuardedAgent<AppContext>[] = [
   {
     id: "publisher",
     name: "Publishing agent",
-    execute: ({ input, guard }) =>
-      guard.executeTool(
-        {
-          toolName: "publish-article",
-          action: "Publish final article",
-          input,
-          sideEffect: true,
+    execute: ({ input, tools }) =>
+      tools.execute("publish-article", input, {
+        approval: {
+          token: approvalQueue.currentToken(),
           approvedBy: approvalQueue.currentReviewer(),
         },
-        publishingApi.publish,
-      ),
+        idempotencyKey: `publish:${articleId}`,
+      }),
   },
 ];
 
@@ -84,7 +90,7 @@ const result = await guard.runSequence(agents, appContext);
 `runSequence` returns immediately when a handoff crosses the configured
 threshold. Later agents are not invoked.
 
-## Option B: insert it into an existing graph or loop
+## Option B: insert it into an existing serial graph or loop
 
 For a graph framework, keep its scheduler and add two middleware calls:
 
@@ -114,10 +120,45 @@ graphState.currentNode = failedNode;
 
 This retries only the failed node; previously verified work is preserved.
 
+For a true branch/merge DAG, use `LineageGuardGraphRun` or submit the v1.1 graph
+contract. Every node declares `parentIds`; merge nodes should provide
+`inheritedClaims[parentId]` so each edge compares the relevant claim projection
+instead of unrelated full documents.
+
+## Persist and resume a session
+
+Implement the small snapshot-store contract with your transactional database,
+workflow engine, or durable queue:
+
+```ts
+const snapshotStore: LineageGuardSnapshotStore = {
+  load: (sessionId) => database.lineageSessions.get(sessionId),
+  save: (snapshot) =>
+    database.lineageSessions.put(snapshot.sessionId, snapshot),
+};
+
+await guard.checkpoint(snapshotStore);
+
+const resumed = await LineageGuardSession.resume(
+  snapshotStore,
+  guard.sessionId,
+  {
+    approvalVerifier: approvalService.verify,
+    tools: registeredTools,
+  },
+);
+```
+
+Snapshots contain no tool implementations, callbacks, raw approval tokens, or
+prior tool results. Those are reattached by the host. If the session used custom
+lineage rules, restore requires the same rule IDs so a resumed run cannot
+silently change policy. A restored idempotency record without a cached result
+fails closed instead of repeating a side effect.
+
 ## Protect tools before execution
 
-Read-only tools are allowed by default. Side-effecting tools require named human
-approval by default:
+Read-only tools are allowed by default. Side-effecting tools require a scoped
+approval token verified by the host:
 
 ```ts
 await guard.executeTool(
@@ -126,7 +167,11 @@ await guard.executeTool(
     action: "Send customer response",
     input: email,
     sideEffect: true,
-    approvedBy: reviewerEmail,
+    approval: {
+      token: signedApproval.token,
+      approvedBy: signedApproval.reviewerEmail,
+    },
+    idempotencyKey: `send:${messageId}`,
   },
   emailProvider.send,
 );
@@ -150,10 +195,14 @@ Explicit denies win even when an approval is supplied. Wildcards are supported
 as a trailing `*`. `sideEffectTools` lets host-owned policy override an
 incorrect `sideEffect: false` declaration.
 
-The host application must construct tool intents and obtain `approvedBy` from
-an authenticated approval workflow. Do not let model text choose the
-side-effect classification or invent the reviewer identity. The SDK cannot
-secure a tool implementation that remains callable outside the wrapper.
+The verifier receives the session id, run id, tool name, action, SHA-256 input
+fingerprint, token, and reviewer. It should validate expiry, reviewer identity,
+scope, and revocation. Tokens are consumed once after authorization.
+
+Prefer registered tools and give agents only `GuardedToolClient`. Do not let
+model text choose the side-effect classification, register implementations, or
+issue approvals. The SDK cannot secure an implementation that remains callable
+outside the wrapper.
 
 ## Python, Go, Java, and other runtimes
 
@@ -163,6 +212,8 @@ the workflow:
 ```http
 POST /api/evaluate
 Content-Type: application/json
+Authorization: Bearer tenant-secret
+X-LineageGuard-Tenant: tenant-a
 
 {
   "runName": "External agent run",
@@ -179,7 +230,7 @@ The response includes:
   "status": "ok",
   "decision": "block",
   "blockingTransitionIndex": 1,
-  "runId": "RUN-12345678",
+  "runId": "RUN-1234567890ABCDEF",
   "recovery": {
     "status": "review-required",
     "restartStageLabel": "Writing agent",
@@ -189,6 +240,13 @@ The response includes:
 ```
 
 Do not call the next agent when the decision is `block`.
+
+On a hosted endpoint, workspace-authenticated identity is accepted only when
+`LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY=true` behind a dispatcher that strips
+user-supplied identity headers. External callers use the configured tenant
+bearer map. An unconfigured public endpoint returns `503` rather than failing
+open. Built-in quotas are per-isolate; use a gateway for globally coordinated
+multi-region limits.
 
 For tool safety, a local wrapper in the host language remains preferable. A
 network check can fail open if the caller ignores an error, and it cannot undo

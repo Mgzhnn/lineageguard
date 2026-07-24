@@ -56,7 +56,7 @@ test("exposes a deployment health contract", async () => {
   const payload = await response.json();
   assert.equal(payload.status, "ok");
   assert.equal(payload.product, "LineageGuard");
-  assert.equal(payload.version, "0.3.0");
+  assert.equal(payload.version, "0.4.0");
   assert.equal(payload.paidApiRequired, false);
   assert.ok(payload.capabilities.includes("recovery-packet"));
   assert.ok(payload.capabilities.includes("pre-tool-gate"));
@@ -154,4 +154,46 @@ test("enforces the API payload limit in bytes", async () => {
   });
 
   assert.equal(response.status, 413);
+});
+
+test("evaluates a branch-and-merge graph through the HTTP contract", async () => {
+  const response = await render("/api/evaluate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      schemaVersion: "1.1",
+      blockAtOrAbove: "medium",
+      nodes: [
+        {
+          id: "source",
+          label: "Source",
+          text: "Some users may save 5%.",
+          parentIds: [],
+        },
+        {
+          id: "policy",
+          label: "Policy",
+          text: "Human approval is required.",
+          parentIds: [],
+        },
+        {
+          id: "merge",
+          label: "Merge",
+          text: "All users will save 10%. Human approval is required.",
+          parentIds: ["source", "policy"],
+          inheritedClaims: {
+            source: "All users will save 10%.",
+            policy: "Human approval is required.",
+          },
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.topology, "graph");
+  assert.equal(payload.decision, "block");
+  assert.equal(payload.blockingEdgeId, "source->merge");
+  assert.deepEqual(payload.recovery.contaminatedNodeIds, ["merge"]);
 });
