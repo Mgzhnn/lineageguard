@@ -84,10 +84,21 @@ pnpm dev
 Open the local URL printed in the terminal. The repository includes planted
 clinical, customer-support, and clean-chain examples.
 
-To embed the SDK in another TypeScript or JavaScript agent runtime:
+To embed the SDK in another TypeScript or JavaScript agent runtime, pack it
+from a checkout (npm publication is planned; the tarball below is the same
+artifact CI installs and verifies on every release):
 
 ```bash
-pnpm add lineageguard
+git clone https://github.com/Mgzhnn/lineageguard.git
+cd lineageguard
+pnpm install --frozen-lockfile
+cd sdk && pnpm pack
+```
+
+Then, in your project:
+
+```bash
+pnpm add /path/to/lineageguard-0.5.0.tgz
 ```
 
 ## Instrument an agent runtime
@@ -331,9 +342,9 @@ expose new language and policy patterns.
 
 ## Package and release safety
 
-The public package is `lineageguard`. It has no runtime dependencies and
-exports the main SDK plus `runtime`, `graph`, `otel`, `analysis`, and
-`pipeline` subpaths. The package lifecycle compiles declarations before every
+The publishable package is `lineageguard` (not yet on npm). It has no runtime
+dependencies and exports the main SDK plus `runtime`, `graph`, `otel`,
+`analysis`, and `pipeline` subpaths. The package lifecycle compiles declarations before every
 pack, and publishing runs the complete repository release gate.
 
 The repository pins pnpm 11.9.0, disables implicit peer installation, declares
