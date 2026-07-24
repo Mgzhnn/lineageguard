@@ -88,9 +88,21 @@ The detector uses three inspectable rule families:
 
 | Family | Protects | Current signals |
 | --- | --- | --- |
-| Evidence | factual structure | numbers, ranges, money, dates, quantities |
-| Meaning | semantic boundaries | certainty, quantifiers, negation |
-| Authority | permissions | protected instructions and action verbs |
+| Evidence | factual structure | numbers, ranges, money, dates, quantities, written-out numbers |
+| Meaning | semantic boundaries | certainty, quantifiers, negation (English and Korean) |
+| Authority | permissions | protected instructions and action verbs (English and Korean) |
+
+Evidence signals canonicalize before comparison: currency magnitudes ($5k →
+$5000), metric units (500mg → 0.5g), complete dates (July 24, 2026 →
+2026-07-24), Korean magnitudes and units (5만원 → ₩50000), and written-out
+numbers next to measurable nouns (three customers → 3customer). Equivalent
+rewrites therefore compare equal, and a value change behind a formatting
+rewrite still differs. Ambiguous forms (bare `m`, partial dates) stay literal
+rather than guessing.
+
+A stage written mostly in a script outside the covered lexicons produces a
+low-severity coverage issue: it does not freeze the run, but the run can no
+longer be reported as clean.
 
 Agreement means multiple deterministic rule families flagged the same
 transition. It is never labeled as statistical confidence.
@@ -187,6 +199,14 @@ Additional rules implement `CustomLineageRule`, choose one of the evidence,
 meaning, or authority families, and return findings for a specific edge. A
 semantic or domain detector can therefore be optional without replacing the
 free deterministic baseline or inventing a confidence score.
+
+The runtime SDK also accepts an optional asynchronous `semanticJudge`. It runs
+in `runAgent`/`runSequence` before the deterministic gate, and its accepted
+findings are replayed into every report through the reserved
+`lineageguard:semantic-judge` rule so reports stay reproducible, snapshots
+persist them, and `resetToLastVerified()` prunes findings for rolled-back
+transitions. A judge failure fails closed by default; the synchronous
+`inspectHandoff` path remains deterministic-only.
 
 The curated evaluation harness records precision, recall, specificity,
 false-positive rate, and expected-signal coverage at the configured blocking

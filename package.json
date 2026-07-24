@@ -1,6 +1,6 @@
 {
   "name": "lineageguard-site",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Local-first warning system for claim mutation across AI agent handoffs.",
   "license": "MIT",
@@ -37,9 +37,10 @@
     "test": "pnpm test:engine && pnpm typecheck && pnpm test:sdk-package && vinext build && pnpm test:render",
     "eval": "node --experimental-strip-types evals/run.ts",
     "eval:check": "node --experimental-strip-types evals/run.ts --check",
-    "verify": "pnpm lint && pnpm test && pnpm eval:check && pnpm test:sdk-tarball && pnpm demo:agent && pnpm demo:otel",
+    "verify": "pnpm lint && pnpm test && pnpm eval:check && pnpm test:sdk-tarball && pnpm demo:agent && pnpm demo:otel && pnpm demo:semantic",
     "demo:agent": "node --experimental-strip-types examples/guarded-agent-runtime.ts",
     "demo:otel": "node --experimental-strip-types examples/otel-ingestion.ts",
+    "demo:semantic": "node --experimental-strip-types examples/semantic-judge.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {

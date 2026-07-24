@@ -84,7 +84,7 @@ const minimums = {
 console.log(
   JSON.stringify(
     {
-      dataset: "curated-regression-v1",
+      dataset: "curated-regression-v2",
       threshold,
       metrics,
       minimums,
