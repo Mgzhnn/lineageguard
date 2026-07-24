@@ -12,6 +12,8 @@
 
 *A free, model-independent reliability control plane for AI agent handoffs.*
 
+<img src="docs/media/hero.png" alt="The LineageGuard workspace: the live mutation tape highlights the first handoff where a claim mutated — 'Study suggests a 12–18% improvement' becomes 'Study shows an 18% improvement' — and marks it as the first break." width="100%" />
+
 </div>
 
 ---
