@@ -14,7 +14,7 @@ test("blocks a broken handoff before a downstream agent runs", async () => {
     onEvent: (event) => events.push(event),
   }).recordSource(
     "Source",
-    "A pilot suggests some users may improve by 12â€“18%. It is not confirmed.",
+    "A pilot suggests some users may improve by 12–18%. It is not confirmed.",
   );
 
   const result = await guard.runSequence(
@@ -142,6 +142,7 @@ test("recovery targets the first blocking transition, not an allowed low signal"
     "Most users may save 5%.",
   );
   assert.equal(allowed.status, "allowed");
+  assert.equal(allowed.report.recovery.status, "not-required");
 
   const blocked = guard.inspectHandoff(
     "numbers",
@@ -151,6 +152,11 @@ test("recovery targets the first blocking transition, not an allowed low signal"
   assert.equal(blocked.status, "blocked");
   assert.equal(blocked.report.analysis.firstMutationIndex, 0);
   assert.equal(blocked.report.recovery.restartStageLabel, "Numbers agent");
+
+  const checkpoint = guard.resetToLastVerified();
+  assert.equal(checkpoint.label, "Rewrite agent");
+  assert.equal(guard.getTrace().length, 2);
+  assert.equal(guard.getRecoveryPacket().status, "not-required");
 });
 
 test("supports the same agent running more than once in a loop", () => {
@@ -181,4 +187,32 @@ test("explicit deny policy overrides an approval", () => {
   });
 
   assert.equal(decision.status, "blocked");
+});
+
+test("blocks tools until an authoritative source is recorded", () => {
+  const guard = new LineageGuardSession();
+
+  const decision = guard.authorizeTool({
+    toolName: "customer-record-read",
+    action: "Read customer record",
+    sideEffect: false,
+  });
+
+  assert.equal(decision.status, "blocked");
+  assert.match(decision.reason, /authoritative source/i);
+});
+
+test("host policy can classify a mislabeled tool as side-effecting", () => {
+  const guard = new LineageGuardSession({
+    toolPolicy: { sideEffectTools: ["send-*"] },
+  }).recordSource("Request", "Prepare a draft.");
+
+  const decision = guard.authorizeTool({
+    toolName: "send-email",
+    action: "Send the draft",
+    sideEffect: false,
+  });
+
+  assert.equal(decision.status, "approval-required");
+  assert.equal(decision.intent.sideEffect, true);
 });

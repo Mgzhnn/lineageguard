@@ -9,7 +9,6 @@ import {
 import {
   buildPlainTextReport,
   getTraceSignalSnapshot,
-  type AnalysisResult,
   type IssueType,
   type TraceStage,
 } from "@/lib/analysis";
@@ -18,7 +17,9 @@ import { runReliabilityPipeline } from "@/lib/pipeline";
 import {
   createSampleTracePayload,
   parseTracePayload,
+  TRACE_LIMITS,
 } from "@/lib/trace-schema";
+import { PIPELINE_VERSION } from "@/lib/version";
 
 const issueLabels: Record<IssueType, string> = {
   number: "NUMBER DRIFT",
@@ -32,18 +33,6 @@ type ReviewVerdict = "confirmed" | "dismissed";
 
 function cloneStages(stages: TraceStage[]) {
   return stages.map((stage) => ({ ...stage }));
-}
-
-function makeReportId(stages: TraceStage[], result: AnalysisResult) {
-  const input = `${stages.map((stage) => stage.text).join("|")}|${result.issues
-    .map((issue) => issue.type)
-    .join("|")}`;
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `LG-${(hash >>> 0).toString(16).toUpperCase().padStart(8, "0")}`;
 }
 
 export default function LineageGuard() {
@@ -89,7 +78,7 @@ export default function LineageGuard() {
   const replayIssues = result.issues.filter(
     (issue) => issue.transitionIndex === replayIndex - 1,
   );
-  const reportId = useMemo(() => makeReportId(stages, result), [stages, result]);
+  const reportId = pipelineRun.id;
   const primaryIssue = result.issues[0];
   const reviewedCount = Object.keys(reviews).length;
   const confirmedCount = Object.values(reviews).filter(
@@ -203,7 +192,7 @@ export default function LineageGuard() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (file.size > 2_000_000) {
+    if (file.size > TRACE_LIMITS.payloadBytes) {
       setImportMessage("Import failed: JSON file must be smaller than 2 MB.");
       return;
     }
@@ -300,7 +289,7 @@ export default function LineageGuard() {
   function exportJson() {
     const payload = {
       exportedAt: new Date().toISOString(),
-      engine: "LineageGuard reliability pipeline v0.2",
+      engine: `LineageGuard reliability pipeline v${PIPELINE_VERSION}`,
       guardrail,
       stages,
       result,
@@ -347,7 +336,7 @@ export default function LineageGuard() {
         <div className="eyebrow">
           <span>FORENSICS FOR AGENT HANDOFFS</span>
           <span className="eyebrow-line" />
-          <span>HEURISTIC MVP · V0.1</span>
+          <span>HEURISTIC MVP · V{PIPELINE_VERSION}</span>
         </div>
         <h1>
           Catch the first

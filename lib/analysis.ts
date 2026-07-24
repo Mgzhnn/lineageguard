@@ -57,6 +57,10 @@ type RankedTerm = {
 };
 
 const certaintyTerms: RankedTerm[] = [
+  { term: "uncertain", rank: 0 },
+  { term: "unconfirmed", rank: 0 },
+  { term: "preliminary", rank: 0 },
+  { term: "pending", rank: 0 },
   { term: "may", rank: 0 },
   { term: "might", rank: 0 },
   { term: "could", rank: 0 },
@@ -99,7 +103,7 @@ const negationPattern =
   /\b(?:not|no|never|without|cannot|can't|won't|isn't|aren't|doesn't|don't|didn't|must not|do not)\b/gi;
 
 const completedActionPattern =
-  /\b(?:sent|emailed|contacted|published|posted|deleted|purchased|bought|booked|deployed|executed|transferred|submitted|approved|released|shared)\b/gi;
+  /\b(?:sent|emailed|contacted|published|posted|deleted|purchased|bought|booked|deployed|executed|transferred|submitted|released|shared)\b/gi;
 
 const guardedActionPattern =
   /\b(?:do not|don't|must not|never|draft only|human approval|approval required|before approval|no external action|without approval|do not send|do not contact|do not publish)\b/i;
@@ -176,7 +180,18 @@ function extractNumberClaims(text: string) {
     /(?:[$€£₩]\s*)?\d[\d,]*(?:\.\d+)?(?:\s*(?:-|–|—|to)\s*(?:[$€£₩]\s*)?\d[\d,]*(?:\.\d+)?)?(?:\s*(?:%|percent|percentage points?|k|m|b|thousand|million|billion|seconds?|minutes?|hours?|days?|weeks?|months?|years?|people|users?|customers?|cases?|degrees?))?/gi;
   return unique(
     [...text.matchAll(numberPattern)]
-      .map((match) => normalize(match[0]).replace(/,/g, ""))
+      .map((match) =>
+        normalize(match[0])
+          .replace(/,/g, "")
+          .replace(/\bpercentage points?\b/g, "pp")
+          .replace(/\bpercent\b/g, "%")
+          .replace(/\s+to\s+/g, "-")
+          .replace(
+            /\b(seconds?|minutes?|hours?|days?|weeks?|months?|years?|users?|customers?|cases?|degrees?)\b/g,
+            (unit) => unit.replace(/s$/, ""),
+          )
+          .replace(/\s+/g, ""),
+      )
       .filter(Boolean),
   );
 }
@@ -297,9 +312,9 @@ function analyzeTransition(
   const beforeCertainty = highestRankedTerm(from.text, certaintyTerms);
   const afterCertainty = highestRankedTerm(to.text, certaintyTerms);
   if (
-    beforeCertainty &&
     afterCertainty &&
-    afterCertainty.rank > beforeCertainty.rank
+    ((beforeCertainty && afterCertainty.rank > beforeCertainty.rank) ||
+      (!beforeCertainty && afterCertainty.rank >= 2))
   ) {
     issues.push(
       makeIssue(
@@ -309,8 +324,10 @@ function analyzeTransition(
         from,
         to,
         "Confidence was inflated",
-        `Language moved from “${beforeCertainty.term}” to “${afterCertainty.term}”, making the claim sound more certain than the previous handoff.`,
-        [beforeCertainty.term],
+        beforeCertainty
+          ? `Language moved from “${beforeCertainty.term}” to “${afterCertainty.term}”, making the claim sound more certain than the previous handoff.`
+          : `The handoff introduced “${afterCertainty.term}” without an explicit certainty qualifier in the previous stage.`,
+        beforeCertainty ? [beforeCertainty.term] : [],
         [afterCertainty.term],
       ),
     );
@@ -319,9 +336,9 @@ function analyzeTransition(
   const beforeQuantifier = highestRankedTerm(from.text, quantifierTerms);
   const afterQuantifier = highestRankedTerm(to.text, quantifierTerms);
   if (
-    beforeQuantifier &&
     afterQuantifier &&
-    afterQuantifier.rank > beforeQuantifier.rank
+    ((beforeQuantifier && afterQuantifier.rank > beforeQuantifier.rank) ||
+      (!beforeQuantifier && afterQuantifier.rank >= 3))
   ) {
     issues.push(
       makeIssue(
@@ -331,8 +348,10 @@ function analyzeTransition(
         from,
         to,
         "Scope became broader",
-        `The population changed from “${beforeQuantifier.term}” to “${afterQuantifier.term}”. A limited claim may now read like a universal one.`,
-        [beforeQuantifier.term],
+        beforeQuantifier
+          ? `The population changed from “${beforeQuantifier.term}” to “${afterQuantifier.term}”. A limited claim may now read like a universal one.`
+          : `The handoff introduced the broad quantifier “${afterQuantifier.term}” without an explicit population qualifier in the previous stage.`,
+        beforeQuantifier ? [beforeQuantifier.term] : [],
         [afterQuantifier.term],
       ),
     );

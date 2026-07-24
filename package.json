@@ -12,7 +12,8 @@
     "start": "vinext start",
     "test:engine": "node --experimental-strip-types --test tests/analysis.test.ts tests/pipeline.test.ts tests/trace-schema.test.ts tests/sdk.test.ts tests/runtime.test.ts",
     "test:render": "node --test tests/rendered-html.test.mjs",
-    "test": "node --experimental-strip-types --test tests/analysis.test.ts tests/pipeline.test.ts tests/trace-schema.test.ts tests/sdk.test.ts tests/runtime.test.ts && vinext build && node --test tests/rendered-html.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm test:engine && pnpm typecheck && vinext build && pnpm test:render",
     "demo:agent": "node --experimental-strip-types examples/guarded-agent-runtime.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },

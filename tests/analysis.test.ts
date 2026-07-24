@@ -120,3 +120,68 @@ test("extracts the claim fingerprint used by mutation replay", () => {
   assert.equal(snapshot.scope, "some");
   assert.deepEqual(snapshot.negations, ["not"]);
 });
+
+test("normalizes equivalent numeric formatting before comparing claims", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "Source",
+      text: "The estimate is 12 to 18 percent within 5 days.",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      text: "Within 5 day, the estimate is 12–18%.",
+    },
+  ]);
+
+  assert.equal(
+    result.issues.some((issue) => issue.type === "number"),
+    false,
+  );
+});
+
+test("flags strong certainty and universal scope introduced from nowhere", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "Source",
+      text: "Users reported an improvement.",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      text: "The study proves all users improved.",
+    },
+  ]);
+
+  assert.ok(result.issues.some((issue) => issue.type === "certainty"));
+  assert.ok(result.issues.some((issue) => issue.type === "quantifier"));
+});
+
+test("does not treat an approval itself as a completed protected action", () => {
+  const result = analyzeLineage(
+    [
+      {
+        id: "source",
+        label: "Source",
+        text: "Prepare an article draft.",
+      },
+      {
+        id: "agent",
+        label: "Agent",
+        text: "A human approved the article draft.",
+      },
+    ],
+    "Human approval is required before publishing.",
+  );
+
+  assert.equal(
+    result.issues.some(
+      (issue) =>
+        issue.type === "guardrail" &&
+        issue.title === "Protected action appears completed",
+    ),
+    false,
+  );
+});

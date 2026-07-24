@@ -151,14 +151,15 @@ pnpm test
 pnpm lint
 ```
 
-`pnpm test` runs detector, pipeline, runtime enforcement, SDK, and schema tests;
-creates a production build; checks the rendered interface; and verifies both
-API contracts.
+`pnpm test` runs detector, pipeline, runtime enforcement, SDK, schema, and
+type checks; creates a production build; checks the rendered interface; and
+verifies both API contracts.
 
 Individual commands:
 
 ```bash
 pnpm test:engine
+pnpm typecheck
 pnpm build
 pnpm test:render
 ```
@@ -198,6 +199,11 @@ also warn on a harmless rewrite.
 Human confirmation is therefore part of the product, not hidden in fine print.
 Do not use the current rules as a replacement for source verification,
 compliance review, medical judgment, or safety approval.
+
+The current runtime is also deliberately serial and in-memory. It does not yet
+model parallel DAG branches, provide durable crash recovery, authenticate
+reviewer identities, or add tenant authentication and quotas to the optional
+HTTP adapter. The host orchestrator owns those production boundaries.
 
 ## Project structure
 

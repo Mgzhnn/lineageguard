@@ -56,7 +56,7 @@ test("exposes a deployment health contract", async () => {
   const payload = await response.json();
   assert.equal(payload.status, "ok");
   assert.equal(payload.product, "LineageGuard");
-  assert.equal(payload.version, "0.3");
+  assert.equal(payload.version, "0.3.0");
   assert.equal(payload.paidApiRequired, false);
   assert.ok(payload.capabilities.includes("recovery-packet"));
   assert.ok(payload.capabilities.includes("pre-tool-gate"));
@@ -85,8 +85,73 @@ test("blocks an unsafe handoff through the framework-neutral API", async () => {
   });
 
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
   const payload = await response.json();
   assert.equal(payload.decision, "block");
   assert.equal(payload.blockingTransitionIndex, 0);
   assert.equal(payload.recovery.restartStageLabel, "Writer");
+});
+
+test("does not create a recovery packet for an allowed warning", async () => {
+  const response = await render("/api/evaluate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      blockAtOrAbove: "high",
+      stages: [
+        {
+          id: "source",
+          label: "Source",
+          text: "Some users may save 5%.",
+        },
+        {
+          id: "writer",
+          label: "Writer",
+          text: "Most users may save 5%.",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.decision, "allow");
+  assert.equal(payload.recovery.status, "not-required");
+});
+
+test("rejects invalid API configuration and media types", async () => {
+  const invalidThreshold = await render("/api/evaluate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      blockAtOrAbove: "critical",
+      stages: [
+        { label: "Source", text: "Source text." },
+        { label: "Agent", text: "Agent text." },
+      ],
+    }),
+  });
+  assert.equal(invalidThreshold.status, 400);
+
+  const wrongMediaType = await render("/api/evaluate", {
+    method: "POST",
+    headers: { "content-type": "text/plain" },
+    body: "{}",
+  });
+  assert.equal(wrongMediaType.status, 415);
+});
+
+test("enforces the API payload limit in bytes", async () => {
+  const response = await render("/api/evaluate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      stages: [
+        { label: "Source", text: "😀".repeat(510_000) },
+        { label: "Agent", text: "Agent text." },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 413);
 });

@@ -64,6 +64,10 @@ handoff. Adjacent stages become directed graph edges. Detected changes belong
 to an edge, which lets the system identify the first failure instead of merely
 judging the final answer.
 
+The current topology is intentionally a single ordered chain. Event imports
+normalize repeated agent executions into unique stage-instance IDs so the graph
+cannot contain ambiguous nodes.
+
 ## Rule families
 
 The detector uses three inspectable rule families:
@@ -90,12 +94,19 @@ executor, it must expose middleware or receive wrapped tool functions. Reading
 “email sent” from the final response is too late to prevent the email.
 
 Read-only tools are allowed by default. Side-effecting tools require a named
-human approval by default. Explicit deny rules always win.
+human approval by default. Host policy can classify known tools as
+side-effecting even when a caller labels them incorrectly. Explicit deny rules
+always win.
+
+`approvedBy` is an attestation supplied by the host runtime, not an identity
+provider. A production host must derive it from its authenticated approval
+system rather than from model output or arbitrary request data.
 
 ## Recovery semantics
 
-When a blocking break exists, `LineageGuardSession` freezes the run and the
-recovery packet:
+When a break crosses the configured threshold, `LineageGuardSession` freezes
+the run and creates a recovery packet. Lower-severity warnings remain visible
+but do not create a rollback packet:
 
 1. freezes the failed output and every descendant;
 2. selects the last verified stage as the checkpoint;
@@ -110,13 +121,35 @@ apply. LineageGuard never silently approves external actions.
 
 ## Trust boundaries
 
-- Imported files and API bodies are capped at 2 MB.
-- Payload shape is validated before the pipeline receives it.
+- Imported files and API bodies are capped at 2,000,000 bytes.
+- API bodies are bounded while streaming instead of after full buffering.
+- Payload shape, field lengths, schema version, and node identity are validated
+  before the pipeline receives them.
 - The in-process detector makes no network request and needs no secret.
 - The optional server is stateless and does not persist trace contents.
+- Evaluation responses declare `Cache-Control: no-store`.
 - Side-effecting tools require approval by default in the runtime SDK.
+- Tools are blocked until an authoritative source has been recorded.
 - Explicit deny rules override a supplied approval.
 - Human verdicts remain visible because deterministic rules can be wrong.
+
+## Known production boundaries
+
+- The lineage model is a chain, not a DAG. Parallel branches, merges, and
+  multi-parent claims need an explicit graph contract before they can be
+  supervised safely.
+- Runtime sessions are in memory. Crash recovery, distributed locks, durable
+  approvals, and resumable checkpoints belong in the host orchestrator.
+- The public HTTP adapter has no tenant authentication, quotas, or audit store.
+  A shared deployment needs an authenticated gateway, rate limiting, tenant
+  isolation, and a retention policy.
+- Detection is lexical and deterministic. It does not verify whether the
+  source itself is true, align every paraphrase semantically, or understand
+  domain-specific units and policy language.
+- The SDK assumes the host owns the actual tool boundary. Code that can bypass
+  the wrapper can also bypass LineageGuard.
+- A `LineageGuardSession` is a serial state machine. Concurrent handoffs should
+  use separate sessions until branch-aware concurrency is implemented.
 
 ## Extension points
 

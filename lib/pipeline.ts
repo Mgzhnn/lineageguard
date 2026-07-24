@@ -7,6 +7,7 @@ import {
   type TraceSignalSnapshot,
   type TraceStage,
 } from "./analysis.ts";
+import { PIPELINE_VERSION } from "./version.ts";
 
 export type PipelineModuleId =
   | "trace-collector"
@@ -68,7 +69,7 @@ export type RecoveryPacket = {
 
 export type ReliabilityPipelineRun = {
   id: string;
-  version: "0.2";
+  version: typeof PIPELINE_VERSION;
   analysis: AnalysisResult;
   graph: {
     nodes: ClaimGraphNode[];
@@ -378,7 +379,7 @@ export function runReliabilityPipeline(
 
   return {
     id: `RUN-${identity}`,
-    version: "0.2",
+    version: PIPELINE_VERSION,
     analysis,
     graph: {
       nodes: graphNodes,

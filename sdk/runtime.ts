@@ -28,6 +28,7 @@ export type ToolPolicy = {
   allowedTools?: string[];
   deniedTools?: string[];
   approvalRequiredTools?: string[];
+  sideEffectTools?: string[];
   defaultSideEffectMode?: "allow" | "deny" | "require-approval";
 };
 
@@ -159,21 +160,20 @@ export class LineageGuardSession {
       output,
     );
     const candidateStages = [...this.stages, candidate];
-    let report = runReliabilityPipeline(candidateStages, this.guardrail);
-    const currentTransition = report.analysis.transitions.at(-1);
+    const initialReport = runReliabilityPipeline(
+      candidateStages,
+      this.guardrail,
+    );
+    const currentTransition = initialReport.analysis.transitions.at(-1);
     const shouldBlock =
       currentTransition !== undefined &&
       severityRank[currentTransition.severity] >=
         severityRank[this.blockAtOrAbove];
-
-    if (
-      shouldBlock &&
-      report.analysis.firstMutationIndex !== candidateStages.length - 2
-    ) {
-      report = runReliabilityPipeline(candidateStages, this.guardrail, {
-        recoveryTransitionIndex: candidateStages.length - 2,
-      });
-    }
+    const report = runReliabilityPipeline(candidateStages, this.guardrail, {
+      recoveryTransitionIndex: shouldBlock
+        ? candidateStages.length - 2
+        : null,
+    });
 
     this.stages = candidateStages;
     this.latestReport = report;
@@ -264,7 +264,22 @@ export class LineageGuardSession {
   authorizeTool<TInput>(intent: ToolIntent<TInput>): ToolDecision<TInput> {
     const toolName = cleanText(intent.toolName, "Tool name");
     const action = cleanText(intent.action, "Tool action");
-    const normalizedIntent = { ...intent, toolName, action };
+    const normalizedIntent = {
+      ...intent,
+      toolName,
+      action,
+      sideEffect:
+        intent.sideEffect ||
+        matchesTool(toolName, this.toolPolicy.sideEffectTools),
+    };
+
+    if (!this.stages.length) {
+      return this.toolDecision(
+        "blocked",
+        "Record an authoritative source before using tools.",
+        normalizedIntent,
+      );
+    }
 
     if (this.frozen) {
       return this.toolDecision(
@@ -288,7 +303,7 @@ export class LineageGuardSession {
     );
     const needsApproval =
       matchesTool(toolName, this.toolPolicy.approvalRequiredTools) ||
-      (intent.sideEffect &&
+      (normalizedIntent.sideEffect &&
         !explicitlyAllowed &&
         (this.toolPolicy.defaultSideEffectMode ?? "require-approval") ===
           "require-approval");
@@ -302,7 +317,7 @@ export class LineageGuardSession {
     }
 
     if (
-      intent.sideEffect &&
+      normalizedIntent.sideEffect &&
       !explicitlyAllowed &&
       (this.toolPolicy.defaultSideEffectMode ?? "require-approval") === "deny"
     ) {
@@ -317,7 +332,7 @@ export class LineageGuardSession {
       "allowed",
       intent.approvedBy?.trim()
         ? `Approved by ${intent.approvedBy.trim()}.`
-        : intent.sideEffect
+        : normalizedIntent.sideEffect
           ? `${toolName} is explicitly allowed by policy.`
           : `${toolName} is read-only.`,
       normalizedIntent,
@@ -339,13 +354,18 @@ export class LineageGuardSession {
     if (!this.latestReport || !this.frozen) {
       throw new Error("There is no blocked handoff to recover.");
     }
-    const failedTransition = this.latestReport.analysis.firstMutationIndex;
-    if (failedTransition === null) {
-      throw new Error("The current run has no failed transition.");
+    const restartStageIndex = this.latestReport.recovery.restartStageIndex;
+    if (restartStageIndex === null) {
+      throw new Error("The current run has no blocking transition.");
     }
+    const failedTransition = restartStageIndex - 1;
     this.stages = this.stages.slice(0, failedTransition + 1);
     this.frozen = false;
-    this.latestReport = runReliabilityPipeline(this.stages, this.guardrail);
+    this.latestReport = runReliabilityPipeline(
+      this.stages,
+      this.guardrail,
+      { recoveryTransitionIndex: null },
+    );
     const checkpoint = this.lastStage();
     this.emit(
       "recovery-applied",

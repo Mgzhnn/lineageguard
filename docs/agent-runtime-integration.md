@@ -140,13 +140,20 @@ const guard = new LineageGuardSession({
     allowedTools: ["database-read", "search-*"],
     deniedTools: ["shell-*", "delete-account"],
     approvalRequiredTools: ["send-email", "issue-refund"],
+    sideEffectTools: ["send-*", "publish-*", "delete-*"],
     defaultSideEffectMode: "require-approval",
   },
 });
 ```
 
 Explicit denies win even when an approval is supplied. Wildcards are supported
-as a trailing `*`.
+as a trailing `*`. `sideEffectTools` lets host-owned policy override an
+incorrect `sideEffect: false` declaration.
+
+The host application must construct tool intents and obtain `approvedBy` from
+an authenticated approval workflow. Do not let model text choose the
+side-effect classification or invent the reviewer identity. The SDK cannot
+secure a tool implementation that remains callable outside the wrapper.
 
 ## Python, Go, Java, and other runtimes
 
