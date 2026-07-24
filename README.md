@@ -5,6 +5,7 @@
 **Catch the first broken handoff in your multi-agent run — before the next agent acts on it.**
 
 [![CI](https://github.com/Mgzhnn/lineageguard/actions/workflows/ci.yml/badge.svg)](https://github.com/Mgzhnn/lineageguard/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/lineageguard)](https://www.npmjs.com/package/lineageguard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.13-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)](./tsconfig.json)
@@ -86,21 +87,10 @@ pnpm dev
 Open the local URL printed in the terminal. The repository includes planted
 clinical, customer-support, and clean-chain examples.
 
-To embed the SDK in another TypeScript or JavaScript agent runtime, pack it
-from a checkout (npm publication is planned; the tarball below is the same
-artifact CI installs and verifies on every release):
+To embed the SDK in another TypeScript or JavaScript agent runtime:
 
 ```bash
-git clone https://github.com/Mgzhnn/lineageguard.git
-cd lineageguard
-pnpm install --frozen-lockfile
-cd sdk && pnpm pack
-```
-
-Then, in your project:
-
-```bash
-pnpm add /path/to/lineageguard-0.5.0.tgz
+pnpm add lineageguard
 ```
 
 ## Instrument an agent runtime
@@ -344,9 +334,9 @@ expose new language and policy patterns.
 
 ## Package and release safety
 
-The publishable package is `lineageguard` (not yet on npm). It has no runtime
-dependencies and exports the main SDK plus `runtime`, `graph`, `otel`,
-`analysis`, and `pipeline` subpaths. The package lifecycle compiles declarations before every
+The public package is [`lineageguard`](https://www.npmjs.com/package/lineageguard).
+It has no runtime dependencies and exports the main SDK plus `runtime`,
+`graph`, `otel`, `analysis`, and `pipeline` subpaths. The package lifecycle compiles declarations before every
 pack, and publishing runs the complete repository release gate.
 
 The repository pins pnpm 11.9.0, disables implicit peer installation, declares
