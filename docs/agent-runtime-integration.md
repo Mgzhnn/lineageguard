@@ -93,6 +93,11 @@ threshold. Later agents are not invoked.
 
 ## Option B: insert it into an existing serial graph or loop
 
+Choose `analysisMode: "hybrid"` to combine stable English/numeric rules with a
+semantic judge, or `analysisMode: "semantic"` to let the judge make handoff
+decisions without built-in lexical findings. Both modes require
+`inspectHandoffAsync()` and a configured `semanticJudge`.
+
 For a graph framework, keep its scheduler and add two middleware calls:
 
 ```ts

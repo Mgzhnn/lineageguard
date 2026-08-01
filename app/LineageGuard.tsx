@@ -83,7 +83,7 @@ export default function LineageGuard() {
           <span>bad handoff.</span>
         </h1>
         <p>
-          A model-independent reliability control plane for agent systems.
+          A model-optional reliability control plane for agent systems.
           Capture every handoff, preserve inherited authority, stop the first
           corrupted transition, and restart from the last verified checkpoint.
         </p>
@@ -840,7 +840,7 @@ if (result.status === "blocked") {
           <div className="sdk-contract">
             <span>RUNTIME CONTRACT</span>
             <strong>SDK + CHAIN/DAG JSON API</strong>
-            <small>Resumable · model-independent · framework-neutral</small>
+            <small>Resumable · model-optional · framework-neutral</small>
           </div>
         </div>
       </section>
@@ -869,8 +869,8 @@ if (result.status === "blocked") {
             <span className="rule-number">02</span>
             <h3>Measure language</h3>
             <p>
-              Confidence and scope words are ranked so quiet inflation becomes
-              visible.
+              Use inspectable English rules, or connect a dynamic semantic
+              judge for contextual review.
             </p>
             <code>may → shows → proven</code>
           </article>
@@ -907,6 +907,11 @@ if (result.status === "blocked") {
             false claim that never changes across the chain.
           </p>
           <p>
+            The runtime SDK also supports hybrid and semantic-only modes. Those
+            modes require a host-provided model or semantic service, so their
+            latency, cost, and variability come from that provider.
+          </p>
+          <p>
             Use it to decide <em>where a human should look</em>—not to replace
             source verification, safety review, or compliance approval.
           </p>
@@ -925,7 +930,7 @@ if (result.status === "blocked") {
           </span>
           <span>LineageGuard</span>
         </a>
-        <p>Open-source prototype · zero paid APIs · data stays in your browser</p>
+        <p>Open-source prototype · zero paid APIs in this browser demo · data stays local</p>
       </footer>
     </main>
   );
