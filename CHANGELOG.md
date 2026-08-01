@@ -2,6 +2,13 @@
 
 All notable changes to LineageGuard are documented here.
 
+## 0.5.1
+
+- Published the local-first forensic workspace as a free interactive demo.
+- Added concise OpenAI Agents SDK and LangGraph integration examples.
+- Kept the hosted evaluation endpoint fail-closed unless a deployer explicitly
+  configures trusted workspace identity or tenant API keys.
+
 ## 0.5.0
 
 - Added equivalence-aware canonicalization so formatting rewrites of the same
