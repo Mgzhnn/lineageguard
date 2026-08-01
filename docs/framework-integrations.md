@@ -37,7 +37,7 @@ if (typeof researchRun.finalOutput !== "string") {
   throw new Error("Researcher did not return text.");
 }
 
-const researchGate = guard.inspectHandoff(
+const researchGate = await guard.inspectHandoffAsync(
   "researcher",
   researcher.name,
   researchRun.finalOutput,
@@ -52,7 +52,7 @@ if (typeof writingRun.finalOutput !== "string") {
   throw new Error("Writer did not return text.");
 }
 
-const writingGate = guard.inspectHandoff(
+const writingGate = await guard.inspectHandoffAsync(
   "writer",
   writer.name,
   writingRun.finalOutput,
@@ -92,7 +92,11 @@ const guard = new LineageGuardSession({
 
 const guardedWriter: typeof WorkflowState.Node = async (state) => {
   const proposed = await invokeWriterAgent(state.currentText);
-  const decision = guard.inspectHandoff("writer", "Writer", proposed);
+  const decision = await guard.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    proposed,
+  );
 
   if (decision.status === "blocked") {
     await queueHumanReview(decision.report.recovery);

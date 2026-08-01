@@ -1,6 +1,6 @@
 {
   "name": "lineageguard-site",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "description": "Local-first warning system for claim mutation across AI agent handoffs.",
   "license": "MIT",

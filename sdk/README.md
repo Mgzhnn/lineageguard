@@ -45,6 +45,11 @@ closed unless host policy explicitly allows them or a configured verifier
 accepts a scoped, one-time approval token. Keep tool implementations, approval
 issuance, durable storage, and distributed locks outside model-controlled code.
 
+Approval verifiers may be synchronous or asynchronous. `executeTool()` and the
+registered tool client await asynchronous verification and reserve the token
+while it is pending. For an async preflight without execution, use
+`authorizeToolAsync()`.
+
 ## Analyze a graph
 
 ```ts

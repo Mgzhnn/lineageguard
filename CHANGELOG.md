@@ -2,6 +2,17 @@
 
 All notable changes to LineageGuard are documented here.
 
+## 0.6.0
+
+- Added `inspectHandoffAsync()` so existing framework loops can apply the
+  optional semantic judge before the deterministic handoff gate.
+- Added asynchronous approval verification for production services backed by
+  databases, policy engines, or remote identity systems.
+- Reserved one-time approval tokens while asynchronous verification is in
+  progress, preventing concurrent executions from racing the same token.
+- Added regression coverage for async semantic inspection, async approval
+  execution, token reservation, and idempotent semantic review.
+
 ## 0.5.1
 
 - Published the local-first forensic workspace as a free interactive demo.
