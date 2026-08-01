@@ -83,6 +83,8 @@ export type CustomLineageRule = {
 
 export type AnalysisOptions = {
   rules?: readonly CustomLineageRule[];
+  /** Disable the built-in lexical families and evaluate custom rules only. */
+  includeBuiltInRules?: boolean;
 };
 
 type RankedTerm = {
@@ -117,40 +119,6 @@ const certaintyTerms: RankedTerm[] = [
   { term: "guarantees", rank: 3 },
   { term: "definitely", rank: 3 },
   { term: "certainly", rank: 3 },
-  // Korean terms use fully conjugated stems so a negated form ("확정되지 않")
-  // never contains its assertive counterpart ("확정되었").
-  { term: "확정되지 않", rank: 0 },
-  { term: "확인되지 않", rank: 0 },
-  { term: "확실하지 않", rank: 0 },
-  { term: "미확정", rank: 0 },
-  { term: "불확실", rank: 0 },
-  { term: "잠정", rank: 0 },
-  { term: "검토 중", rank: 0 },
-  { term: "보류", rank: 0 },
-  { term: "수 있", rank: 0 },
-  { term: "가능성", rank: 0 },
-  { term: "추정", rank: 0 },
-  { term: "아마", rank: 0 },
-  { term: "예상", rank: 1 },
-  { term: "전망", rank: 1 },
-  { term: "할 것입니다", rank: 2 },
-  { term: "될 것입니다", rank: 2 },
-  { term: "할 것이다", rank: 2 },
-  { term: "될 것이다", rank: 2 },
-  { term: "할 예정", rank: 2 },
-  { term: "확정되었", rank: 3 },
-  { term: "확정됐", rank: 3 },
-  { term: "확정입니다", rank: 3 },
-  { term: "확실합니다", rank: 3 },
-  { term: "확실하다", rank: 3 },
-  { term: "확실히", rank: 3 },
-  { term: "분명히", rank: 3 },
-  { term: "보장합니다", rank: 3 },
-  { term: "보장됩니다", rank: 3 },
-  { term: "입증되었", rank: 3 },
-  { term: "입증됐", rank: 3 },
-  { term: "증명되었", rank: 3 },
-  { term: "반드시", rank: 3 },
 ];
 
 const quantifierTerms: RankedTerm[] = [
@@ -165,42 +133,16 @@ const quantifierTerms: RankedTerm[] = [
   { term: "always", rank: 4 },
   { term: "none", rank: 4 },
   { term: "never", rank: 4 },
-  { term: "일부", rank: 0 },
-  { term: "몇몇", rank: 0 },
-  { term: "여러", rank: 1 },
-  { term: "다수", rank: 2 },
-  { term: "많은", rank: 2 },
-  { term: "대부분", rank: 3 },
-  { term: "대다수", rank: 3 },
-  { term: "모든", rank: 4 },
-  { term: "모두", rank: 4 },
-  { term: "전부", rank: 4 },
-  { term: "전체", rank: 4 },
-  { term: "항상", rank: 4 },
-  { term: "아무도", rank: 4 },
 ];
 
 const negationPattern =
   /\b(?:not|no|never|without|cannot|can't|won't|isn't|aren't|doesn't|don't|didn't|must not|do not)\b/gi;
 
-// Korean negation follows the verb stem, so these are matched as substrings
-// rather than \b-bounded words (JS \b does not work around Hangul).
-const koreanNegationPattern =
-  /(?:지 않|지 마|지 말|안 됩니다|안 된다|안 됨|없습니다|없음|아닙니다|아니다|못했|못합니다|불가능|금지)/g;
-
 const completedActionPattern =
   /\b(?:sent|emailed|contacted|published|posted|deleted|purchased|bought|booked|deployed|executed|transferred|submitted|released|shared)\b/gi;
 
-// Past/completed conjugations only ("전송했") so negated or prospective forms
-// ("전송하지 않았", "전송할") never match.
-const koreanCompletedActionPattern =
-  /(?:전송했|전송됐|전송되었|발송했|발송됐|발송되었|보냈|게시했|게시됐|게시되었|공개했|삭제했|삭제됐|삭제되었|구매했|결제했|예약했|배포했|배포됐|배포되었|실행했|실행됐|실행되었|이체했|송금했|제출했|제출됐|제출되었|공유했|공유됐|공유되었|연락했|발행했|출시했)/g;
-
 const guardedActionPattern =
   /\b(?:do not|don't|must not|never|draft only|human approval|approval required|before approval|no external action|without approval|do not send|do not contact|do not publish)\b/i;
-
-const koreanGuardedActionPattern =
-  /(?:하지 마|하지 말|금지|승인 없이|승인 전|승인이 필요|초안만|보내지 마|전송하지 마|게시하지 마|연락하지 마)/;
 
 const stopWords = new Set([
   "a",
@@ -295,16 +237,10 @@ function hasUncertaintyHedgeInClause(
   const clause = text.slice(clauseStart, clauseEnd);
   const strongOffset = strongTermIndex - clauseStart;
   const contrastBoundary =
-    /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b|(?:하지만|그러나|그렇지만|반면)/i;
+    /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b/i;
   const hedgePattern =
     /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appears|suggests|estimated|approximately|likely)\b/gi;
-  const koreanHedgePattern =
-    /(?:수 있|수 없|가능성|추정|아마|예상|것으로 보|잠정|미확정|검토 중|보류)/g;
-
-  const hedges = [
-    ...clause.matchAll(hedgePattern),
-    ...clause.matchAll(koreanHedgePattern),
-  ];
+  const hedges = [...clause.matchAll(hedgePattern)];
   for (const hedge of hedges) {
     if (hedge.index === undefined) continue;
     const hedgeStart = hedge.index;
@@ -373,7 +309,6 @@ const monthAlternation =
 // Complete dates only: partial dates ("July 24") stay in the plain number
 // path because dropping or adding a year is not a provable equivalence.
 const isoDatePattern = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
-const koreanDatePattern = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/g;
 const writtenDatePatterns = [
   new RegExp(
     `\\b(${monthAlternation})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,\\s*|\\s+)(\\d{4})\\b`,
@@ -408,12 +343,6 @@ function extractDateClaims(text: string): {
   };
 
   for (const match of [...remaining.matchAll(isoDatePattern)]) {
-    consume(
-      match as RegExpExecArray,
-      toIsoDate(Number(match[1]), Number(match[2]), Number(match[3])),
-    );
-  }
-  for (const match of [...remaining.matchAll(koreanDatePattern)]) {
     consume(
       match as RegExpExecArray,
       toIsoDate(Number(match[1]), Number(match[2]), Number(match[3])),
@@ -472,42 +401,18 @@ const metricUnitFactors: Record<string, { factor: number; base: string }> = {
   kilometre: { factor: 1e3, base: "m" },
 };
 
-const koreanMagnitudeFactors: Record<string, number> = {
-  천: 1e3,
-  만: 1e4,
-  십만: 1e5,
-  백만: 1e6,
-  천만: 1e7,
-  억: 1e8,
-};
-
-const koreanUnitMap: Record<string, string> = {
-  명: "people",
-  개: "개",
-  번: "번",
-  개월: "month",
-  년: "year",
-  시간: "hour",
-  분: "minute",
-  초: "second",
-  일: "day",
-  주: "week",
-};
-
 const measurableNouns =
   "seconds?|minutes?|hours?|days?|weeks?|months?|years?|people|users?|customers?|cases?|degrees?";
 
 const numberUnitAlternation =
   "%|percent|percentage points?|milligrams?|kilograms?|grams?|milliliters?|millilitres?|liters?|litres?|kilometers?|kilometres?|centimeters?|centimetres?|millimeters?|millimetres?|meters?|metres?|mg|kg|km|ml|cl|cm|mm|g|l|k|m|b|thousand|million|billion|" +
-  measurableNouns +
-  "|만원|원|명|개월|개|번|년|시간|분|초|일|주";
+  measurableNouns;
 
-// The trailing lookahead blocks partial Latin unit matches ("500 gallons"
-// must not read as 500g). Hangul is deliberately absent from it: Korean
-// particles legitimately attach to a number or unit ("5만원입니다").
+// The trailing lookahead blocks partial unit matches ("500 gallons" must not
+// read as 500g).
 const numberPattern = new RegExp(
-  "(?:[$€£₩]\\s*)?\\d[\\d,]*(?:\\.\\d+)?\\s*(?:천만|백만|십만|억|만|천)?" +
-    "(?:\\s*(?:-|–|—|to)\\s*(?:[$€£₩]\\s*)?\\d[\\d,]*(?:\\.\\d+)?\\s*(?:천만|백만|십만|억|만|천)?)?" +
+  "(?:[$€£₩]\\s*)?\\d[\\d,]*(?:\\.\\d+)?" +
+    "(?:\\s*(?:-|–|—|to)\\s*(?:[$€£₩]\\s*)?\\d[\\d,]*(?:\\.\\d+)?)?" +
     `(?:\\s*(?:${numberUnitAlternation}))?(?![a-z%])`,
   "gi",
 );
@@ -547,26 +452,15 @@ function singularizeMeasurableNoun(unit: string): string {
 
 function canonicalizeQuantitySide(side: string): string {
   const parsed = side.match(
-    /^([$€£₩]?)\s*(\d+(?:\.\d+)?)\s*(천만|백만|십만|억|만|천)?\s*(.*)$/,
+    /^([$€£₩]?)\s*(\d+(?:\.\d+)?)\s*(.*)$/,
   );
   if (!parsed) return side.replace(/\s+/g, "");
 
-  let currency = parsed[1] ?? "";
+  const currency = parsed[1] ?? "";
   let value = parseFloat(parsed[2]);
-  const koreanMagnitude = parsed[3] ?? "";
-  let unit = (parsed[4] ?? "").trim();
+  let unit = (parsed[3] ?? "").trim();
 
-  if (koreanMagnitude) {
-    value *= koreanMagnitudeFactors[koreanMagnitude] ?? 1;
-  }
-
-  if (unit === "원" || unit === "만원") {
-    if (unit === "만원") value *= 1e4;
-    currency = "₩";
-    unit = "";
-  } else if (koreanUnitMap[unit]) {
-    unit = koreanUnitMap[unit];
-  } else if (unit === "thousand" || unit === "k") {
+  if (unit === "thousand" || unit === "k") {
     value *= 1e3;
     unit = "";
   } else if (unit === "million" || (unit === "m" && currency)) {
@@ -632,16 +526,14 @@ function extractNumberClaims(text: string) {
 function extractNegations(text: string) {
   const normalized = normalize(text);
   return unique(
-    [
-      ...normalized.matchAll(negationPattern),
-      ...normalized.matchAll(koreanNegationPattern),
-    ].map((match) => match[0]),
+    [...normalized.matchAll(negationPattern)].map((match) => match[0]),
   );
 }
 
 function extractCompletedActions(text: string) {
   const normalized = normalize(text);
-  const english = [...normalized.matchAll(completedActionPattern)]
+  return unique(
+    [...normalized.matchAll(completedActionPattern)]
     .filter((match) => {
       const prefix = normalized.slice(
         Math.max(0, (match.index ?? 0) - 80),
@@ -657,13 +549,8 @@ function extractCompletedActions(text: string) {
       const interveningWords = between.trim().split(/\s+/).filter(Boolean);
       return interveningWords.length > 3;
     })
-    .map((match) => match[0]);
-  // Korean completed forms are past-tense conjugations; the negated form
-  // ("전송하지 않았") does not contain them, so no prefix check is needed.
-  const korean = [...normalized.matchAll(koreanCompletedActionPattern)].map(
-    (match) => match[0],
+      .map((match) => match[0]),
   );
-  return unique([...english, ...korean]);
 }
 
 export function getTraceSignalSnapshot(text: string): TraceSignalSnapshot {
@@ -685,7 +572,7 @@ export function getTraceSignalSnapshot(text: string): TraceSignalSnapshot {
 function importantGuardrailWords(text: string) {
   return unique(
     normalize(text)
-      .replace(/[^a-z0-9가-힣\s'-]/g, " ")
+      .replace(/[^a-zÀ-ɏ0-9\s'-]/gi, " ")
       .split(/\s+/)
       .filter(
         (word) =>
@@ -961,9 +848,7 @@ function analyzeGuardrail(
   if (!normalizedGuardrail || stages.length < 2) return [];
 
   const importantWords = importantGuardrailWords(guardrail);
-  const expectsBlockedAction =
-    guardedActionPattern.test(normalizedGuardrail) ||
-    koreanGuardedActionPattern.test(normalizedGuardrail);
+  const expectsBlockedAction = guardedActionPattern.test(normalizedGuardrail);
   const issues: LineageIssue[] = [];
 
   for (let stageIndex = 1; stageIndex < stages.length; stageIndex += 1) {
@@ -1029,10 +914,10 @@ function analyzeGuardrail(
   return issues;
 }
 
-// The meaning and authority lexicons cover English and Korean. A text written
-// mostly in another script must never be reported as "clean", because a clean
-// result there is silence, not safety.
-const coveredScriptPattern = /[a-zÀ-ɏ가-힣]/i;
+// The built-in meaning and authority lexicons cover English. Text mostly in
+// another script must never be reported as "clean" in deterministic mode,
+// because a clean result there is silence, not safety.
+const coveredScriptPattern = /[a-zÀ-ɏ]/i;
 const MIN_LETTERS_FOR_COVERAGE_CHECK = 20;
 const MIN_COVERED_LETTER_RATIO = 0.3;
 
@@ -1063,7 +948,7 @@ function analyzeCoverage(stages: TraceStage[]): LineageIssue[] {
       stages[transitionIndex],
       stages[transitionIndex + 1],
       "Language outside detector coverage",
-      `The meaning and authority rule families currently cover English and Korean, but these stages are mostly written in another script: ${labels}. Numeric evidence checks still apply, but a quiet result here is not evidence of safety. Review the handoffs manually or add a domain lexicon.`,
+      `The built-in meaning and authority rules currently cover English, but these stages are mostly written in another script: ${labels}. Numeric evidence checks still apply, but a quiet deterministic result here is not evidence of safety. Use semantic mode, review the handoffs manually, or add a domain rule.`,
       [],
       [],
     ),
@@ -1088,6 +973,7 @@ export function analyzeLineage(
   options: AnalysisOptions = {},
 ): AnalysisResult {
   const rules = validateCustomRules(options.rules);
+  const includeBuiltInRules = options.includeBuiltInRules ?? true;
   const usableStages = stages.map((stage) => ({
     ...stage,
     text: stage.text.trim(),
@@ -1098,7 +984,9 @@ export function analyzeLineage(
     const from = usableStages[index];
     const to = usableStages[index + 1];
     if (!from.text || !to.text) continue;
-    issues.push(...analyzeTransition(from, to, index));
+    if (includeBuiltInRules) {
+      issues.push(...analyzeTransition(from, to, index));
+    }
     issues.push(
       ...analyzeCustomRules(
         from,
@@ -1110,8 +998,10 @@ export function analyzeLineage(
     );
   }
 
-  issues.push(...analyzeGuardrail(guardrail, usableStages));
-  issues.push(...analyzeCoverage(usableStages));
+  if (includeBuiltInRules) {
+    issues.push(...analyzeGuardrail(guardrail, usableStages));
+    issues.push(...analyzeCoverage(usableStages));
+  }
   issues.sort(
     (a, b) =>
       a.transitionIndex - b.transitionIndex ||

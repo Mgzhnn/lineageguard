@@ -113,6 +113,8 @@ export type SemanticJudge = (
   | null
   | Promise<SemanticJudgeFinding[] | null>;
 
+export type AnalysisMode = "deterministic" | "hybrid" | "semantic";
+
 export const SEMANTIC_JUDGE_RULE_ID = "lineageguard:semantic-judge";
 
 export type LineageGuardSessionOptions = {
@@ -124,6 +126,12 @@ export type LineageGuardSessionOptions = {
   rules?: readonly CustomLineageRule[];
   approvalVerifier?: ToolApprovalVerifier;
   semanticJudge?: SemanticJudge;
+  /**
+   * deterministic: built-in lexical rules only.
+   * hybrid: built-in rules plus the semantic judge.
+   * semantic: semantic judge only; synchronous handoff inspection is disabled.
+   */
+  analysisMode?: AnalysisMode;
   /**
    * What happens when the semantic judge itself throws or rejects.
    * "block" (default) records a high-severity finding so the handoff fails
@@ -208,6 +216,8 @@ export type LineageGuardSessionSnapshot = {
   runName: string;
   guardrail: string;
   blockAtOrAbove: Severity;
+  /** Absent in snapshots created before analysis modes were introduced. */
+  analysisMode?: AnalysisMode;
   toolPolicy: ToolPolicy;
   exposeSessionToAgents: boolean;
   ruleIds: string[];
@@ -427,6 +437,14 @@ function validateSnapshot(snapshot: LineageGuardSessionSnapshot) {
     throw new Error("Snapshot blocking threshold is invalid.");
   }
   if (
+    snapshot.analysisMode !== undefined &&
+    snapshot.analysisMode !== "deterministic" &&
+    snapshot.analysisMode !== "hybrid" &&
+    snapshot.analysisMode !== "semantic"
+  ) {
+    throw new Error("Snapshot analysis mode is invalid.");
+  }
+  if (
     !snapshot.toolPolicy ||
     typeof snapshot.toolPolicy !== "object" ||
     Array.isArray(snapshot.toolPolicy)
@@ -629,6 +647,7 @@ export class LineageGuardSession {
   readonly runName: string;
   private readonly guardrail: string;
   private readonly blockAtOrAbove: Severity;
+  private readonly analysisMode: AnalysisMode;
   private readonly toolPolicy: ToolPolicy;
   private readonly rules: readonly CustomLineageRule[];
   private readonly approvalVerifier?: ToolApprovalVerifier;
@@ -675,6 +694,24 @@ export class LineageGuardSession {
     }
     this.semanticJudge = options.semanticJudge;
     if (
+      options.analysisMode !== undefined &&
+      options.analysisMode !== "deterministic" &&
+      options.analysisMode !== "hybrid" &&
+      options.analysisMode !== "semantic"
+    ) {
+      throw new Error(
+        "Analysis mode must be deterministic, hybrid, or semantic.",
+      );
+    }
+    this.analysisMode =
+      options.analysisMode ??
+      (this.semanticJudge ? "hybrid" : "deterministic");
+    if (this.analysisMode !== "deterministic" && !this.semanticJudge) {
+      throw new Error(
+        `${this.analysisMode} analysis mode requires a semanticJudge.`,
+      );
+    }
+    if (
       options.semanticJudgeFailureMode !== undefined &&
       options.semanticJudgeFailureMode !== "block" &&
       options.semanticJudgeFailureMode !== "warn"
@@ -715,6 +752,20 @@ export class LineageGuardSession {
   }
 
   inspectHandoff(
+    agentId: string,
+    agentName: string,
+    output: string,
+    options: HandoffOptions = {},
+  ) {
+    if (this.analysisMode !== "deterministic") {
+      throw new Error(
+        `${this.analysisMode} analysis mode requires inspectHandoffAsync() so the semantic judge cannot be skipped.`,
+      );
+    }
+    return this.commitHandoff(agentId, agentName, output, options);
+  }
+
+  private commitHandoff(
     agentId: string,
     agentName: string,
     output: string,
@@ -834,8 +885,10 @@ export class LineageGuardSession {
     }
 
     this.assertRunnable();
-    await this.applySemanticJudge(agentId, agentName, output);
-    return this.inspectHandoff(agentId, agentName, output, options);
+    if (this.analysisMode !== "deterministic") {
+      await this.applySemanticJudge(agentId, agentName, output);
+    }
+    return this.commitHandoff(agentId, agentName, output, options);
   }
 
   async runAgent<TContext>(
@@ -1378,6 +1431,7 @@ export class LineageGuardSession {
       runName: this.runName,
       guardrail: this.guardrail,
       blockAtOrAbove: this.blockAtOrAbove,
+      analysisMode: this.analysisMode,
       toolPolicy: cloneToolPolicy(this.toolPolicy),
       exposeSessionToAgents: this.exposeSessionToAgents,
       ruleIds: this.rules.map((rule) => rule.id.trim()),
@@ -1444,6 +1498,7 @@ export class LineageGuardSession {
       runName: snapshot.runName,
       guardrail: snapshot.guardrail,
       blockAtOrAbove: snapshot.blockAtOrAbove,
+      analysisMode: snapshot.analysisMode,
       toolPolicy: snapshot.toolPolicy,
       exposeSessionToAgents: snapshot.exposeSessionToAgents,
       ...options,
@@ -1547,7 +1602,9 @@ export class LineageGuardSession {
           title: "Semantic judge unavailable",
           explanation: failClosed
             ? `The configured semantic judge failed (${message}). Failing closed: this handoff needs human review before downstream agents run.`
-            : `The configured semantic judge failed (${message}). The deterministic rule families still apply, but semantic drift was not reviewed for this handoff.`,
+            : this.analysisMode === "semantic"
+              ? `The configured semantic judge failed (${message}). Semantic-only mode has no lexical fallback, so this low-severity failure signal is the only review evidence for the handoff.`
+              : `The configured semantic judge failed (${message}). The deterministic rule families still apply, but semantic drift was not reviewed for this handoff.`,
         },
       ]);
       this.emit(
@@ -1585,6 +1642,7 @@ export class LineageGuardSession {
     return runReliabilityPipeline(stages, this.guardrail, {
       recoveryTransitionIndex,
       rules,
+      includeBuiltInRules: this.analysisMode !== "semantic",
     });
   }
 

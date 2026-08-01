@@ -40,6 +40,28 @@ if (result.status === "blocked") {
 }
 ```
 
+## Choose an analysis mode
+
+```ts
+const guard = new LineageGuardSession({
+  analysisMode: "semantic",
+  semanticJudge: async ({ from, proposedOutput }) =>
+    reviewMeaningDynamically(from.text, proposedOutput),
+}).recordSource("Source", sourceText);
+
+const decision = await guard.inspectHandoffAsync(
+  "writer",
+  "Writer",
+  proposedOutput,
+);
+```
+
+`deterministic` uses the offline English rules, `hybrid` combines them with the
+judge, and `semantic` uses the judge alone. Hybrid is recommended when stable
+numeric enforcement and nuanced semantic review are both important. Hybrid and
+semantic modes reject synchronous `inspectHandoff()` calls so the judge cannot
+be skipped accidentally.
+
 Agents receive a restricted registered-tool client. Side-effecting tools fail
 closed unless host policy explicitly allows them or a configured verifier
 accepts a scoped, one-time approval token. Keep tool implementations, approval

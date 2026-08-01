@@ -2,6 +2,18 @@
 
 All notable changes to LineageGuard are documented here.
 
+## 0.7.0
+
+- Added explicit `deterministic`, `hybrid`, and `semantic` runtime analysis
+  modes. Semantic-only mode requires the asynchronous judge and disables the
+  built-in lexical findings for handoff decisions.
+- Prevented synchronous inspection from silently bypassing the semantic judge
+  in hybrid or semantic mode.
+- Removed the Korean-specific lexical, guardrail, date, magnitude, unit, test,
+  and evaluation rules to keep the built-in deterministic surface English-only.
+- Reduced the curated English regression set to 33 cases after removing the
+  five Korean-specific cases.
+
 ## 0.6.0
 
 - Added `inspectHandoffAsync()` so existing framework loops can apply the

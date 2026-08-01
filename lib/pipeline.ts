@@ -91,6 +91,7 @@ export type ReliabilityPipelineRun = {
 export type ReliabilityPipelineOptions = {
   recoveryTransitionIndex?: number | null;
   rules?: readonly CustomLineageRule[];
+  includeBuiltInRules?: boolean;
 };
 
 function unique<T>(items: T[]) {
@@ -206,6 +207,7 @@ export function runReliabilityPipeline(
 ): ReliabilityPipelineRun {
   const analysis = analyzeLineage(stages, guardrail, {
     rules: options.rules,
+    includeBuiltInRules: options.includeBuiltInRules,
   });
   const firstBreakDestination =
     analysis.firstMutationIndex === null

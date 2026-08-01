@@ -715,9 +715,68 @@ test("blocks a paraphrase flagged by the semantic judge", async () => {
   assert.equal(issue.family, "meaning");
 });
 
+test("requires a semantic judge for hybrid and semantic modes", () => {
+  assert.throws(
+    () => new LineageGuardSession({ analysisMode: "hybrid" }),
+    /requires a semanticJudge/i,
+  );
+  assert.throws(
+    () => new LineageGuardSession({ analysisMode: "semantic" }),
+    /requires a semanticJudge/i,
+  );
+});
+
+test("semantic mode uses dynamic findings without deterministic fallback", async () => {
+  let judgeCalls = 0;
+  const guard = new LineageGuardSession({
+    analysisMode: "semantic",
+    semanticJudge: () => {
+      judgeCalls += 1;
+      return null;
+    },
+  }).recordSource("Source", "Some users may save 5%.");
+
+  assert.throws(
+    () =>
+      guard.inspectHandoff(
+        "writer",
+        "Writer",
+        "All users are guaranteed to save 50%.",
+      ),
+    /inspectHandoffAsync/i,
+  );
+
+  const decision = await guard.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "All users are guaranteed to save 50%.",
+  );
+  assert.equal(decision.status, "allowed");
+  assert.equal(decision.report.analysis.issues.length, 0);
+  assert.equal(judgeCalls, 1);
+});
+
+test("hybrid mode keeps deterministic evidence checks", async () => {
+  const guard = new LineageGuardSession({
+    analysisMode: "hybrid",
+    semanticJudge: () => null,
+  }).recordSource("Source", "Some users may save 5%.");
+
+  const decision = await guard.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "Some users may save 50%.",
+  );
+  assert.equal(decision.status, "blocked");
+  assert.ok(
+    decision.report.analysis.issues.some((issue) => issue.type === "number"),
+  );
+});
+
 test("applies the semantic judge in an existing framework loop", async () => {
   let judgeCalls = 0;
   const guard = new LineageGuardSession({
+    analysisMode: "semantic",
     semanticJudge: ({ proposedOutput }) => {
       judgeCalls += 1;
       return proposedOutput.includes("finished")
@@ -804,15 +863,16 @@ test("persists semantic findings through snapshots", async () => {
       saved = snapshot;
     },
   };
+  const semanticJudge = () => [
+    {
+      severity: "high" as const,
+      title: "Semantic drift",
+      explanation: "The paraphrase changed the claim.",
+    },
+  ];
   const guard = new LineageGuardSession({
     sessionId: "judge-session",
-    semanticJudge: () => [
-      {
-        severity: "high",
-        title: "Semantic drift",
-        explanation: "The paraphrase changed the claim.",
-      },
-    ],
+    semanticJudge,
   }).recordSource("Source", "The report is still in draft.");
   const result = await guard.runSequence(
     [
@@ -828,8 +888,11 @@ test("persists semantic findings through snapshots", async () => {
   const persisted: LineageGuardSessionSnapshot | null =
     await guard.checkpoint(store);
   assert.equal(persisted?.semanticFindings?.length, 1);
+  assert.equal(persisted?.analysisMode, "hybrid");
 
-  const restored = await LineageGuardSession.resume(store, "judge-session");
+  const restored = await LineageGuardSession.resume(store, "judge-session", {
+    semanticJudge,
+  });
   assert.ok(
     restored
       .getReport()
