@@ -11,6 +11,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)](./tsconfig.json)
 [![Runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-success)](./sdk/package.json)
 
+[**Open the live demo**](https://lineageguard.ugrp44group.chatgpt.site) · [npm package](https://www.npmjs.com/package/lineageguard) · [Framework integrations](./docs/framework-integrations.md)
+
 *A free, model-independent reliability control plane for AI agent handoffs.*
 
 <img src="docs/media/hero.png" alt="The LineageGuard workspace: the live mutation tape highlights the first handoff where a claim mutated — 'Study suggests a 12–18% improvement' becomes 'Study shows an 18% improvement' — and marks it as the first break." width="100%" />
@@ -76,6 +78,11 @@ become the visible blast radius. The resulting **Mutation Receipt** contains a
 stable run fingerprint, first break, signal types, evidence, and human verdicts.
 
 ## Quick start
+
+Try the public, local-first workspace at
+[lineageguard.ugrp44group.chatgpt.site](https://lineageguard.ugrp44group.chatgpt.site).
+Trace analysis happens in the browser; the hosted evaluation API stays disabled
+unless a deployer explicitly configures tenant authentication.
 
 Prerequisite: Node.js 22.13 or newer.
 
@@ -161,7 +168,9 @@ The first demo attempts to send an email, LineageGuard blocks the tool before
 execution, and the final count remains `Emails actually sent: 0`.
 
 See [docs/agent-runtime-integration.md](./docs/agent-runtime-integration.md)
-for the interception contract and integration patterns.
+for the interception contract, or
+[docs/framework-integrations.md](./docs/framework-integrations.md) for concise
+OpenAI Agents SDK and LangGraph examples.
 
 ## Optional semantic judge
 

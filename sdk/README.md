@@ -3,6 +3,10 @@
 Dependency-free claim-lineage analysis and runtime enforcement for AI agent
 handoffs.
 
+[Live demo](https://lineageguard.ugrp44group.chatgpt.site) ·
+[GitHub](https://github.com/Mgzhnn/lineageguard) ·
+[Framework integrations](https://github.com/Mgzhnn/lineageguard/blob/main/docs/framework-integrations.md)
+
 ## Install
 
 ```bash
