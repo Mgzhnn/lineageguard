@@ -197,6 +197,10 @@ fails closed by default (`semanticJudgeFailureMode: "warn"` downgrades that to
 a visible low-severity note). The core stays dependency-free: no judge, no
 model call. Run the executable demo with `pnpm demo:semantic`.
 
+Existing orchestration loops should call `await guard.inspectHandoffAsync(...)`
+to include the semantic judge. The synchronous `inspectHandoff(...)` method is
+kept for deterministic-only, latency-sensitive paths.
+
 ## Analyze branches and merges
 
 Use `LineageGuardGraphRun` for parallel roots, branches, and merge nodes:

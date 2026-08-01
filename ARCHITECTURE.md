@@ -170,6 +170,8 @@ preventing a resumed session from silently changing its detector policy.
   identity or a configured tenant bearer key.
 - Evaluation requests are rate-limited per tenant inside each server isolate.
 - Side-effecting tools require verifier-backed approval by default.
+- Approval verifiers may be asynchronous; one-time tokens are reserved while
+  verification is pending so concurrent calls cannot race within a session.
 - Tools are blocked until an authoritative source has been recorded.
 - Explicit deny rules override a supplied approval.
 - Run receipts use a full SHA-256 content fingerprint; the display ID is a
@@ -181,7 +183,10 @@ preventing a resumed session from silently changing its detector policy.
 - Detection is lexical and deterministic. It does not verify whether the
   source itself is true, align every paraphrase semantically, or understand
   every domain-specific unit and policy language. Custom rules can extend the
-  three inspectable families but remain responsible for their own quality.
+  three inspectable families but remain responsible for their own quality. An
+  optional semantic judge can cover harder paraphrases through
+  `inspectHandoffAsync`, `runAgent`, and `runSequence`, but its quality and cost
+  belong to the host.
 - The SDK assumes the host owns the actual tool boundary. Code that can bypass
   the wrapper can also bypass LineageGuard.
 - A `LineageGuardSession` is a serial state machine. DAG analysis is supported,
