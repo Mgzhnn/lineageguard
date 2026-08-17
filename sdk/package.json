@@ -1,6 +1,6 @@
 {
   "name": "lineageguard",
-  "version": "0.5.1",
+  "version": "0.7.0",
   "description": "Deterministic claim-lineage analysis and runtime enforcement for AI agent handoffs.",
   "license": "MIT",
   "keywords": [

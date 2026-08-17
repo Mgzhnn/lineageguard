@@ -89,12 +89,12 @@ The detector uses three inspectable rule families:
 | Family | Protects | Current signals |
 | --- | --- | --- |
 | Evidence | factual structure | numbers, ranges, money, dates, quantities, written-out numbers |
-| Meaning | semantic boundaries | certainty, quantifiers, negation (English and Korean) |
-| Authority | permissions | protected instructions and action verbs (English and Korean) |
+| Meaning | semantic boundaries | English certainty, quantifiers, and negation; optional dynamic judge |
+| Authority | permissions | English protected instructions and action verbs |
 
 Evidence signals canonicalize before comparison: currency magnitudes ($5k →
 $5000), metric units (500mg → 0.5g), complete dates (July 24, 2026 →
-2026-07-24), Korean magnitudes and units (5만원 → ₩50000), and written-out
+2026-07-24), and written-out
 numbers next to measurable nouns (three customers → 3customer). Equivalent
 rewrites therefore compare equal, and a value change behind a formatting
 rewrite still differs. Ambiguous forms (bare `m`, partial dates) stay literal
@@ -170,6 +170,8 @@ preventing a resumed session from silently changing its detector policy.
   identity or a configured tenant bearer key.
 - Evaluation requests are rate-limited per tenant inside each server isolate.
 - Side-effecting tools require verifier-backed approval by default.
+- Approval verifiers may be asynchronous; one-time tokens are reserved while
+  verification is pending so concurrent calls cannot race within a session.
 - Tools are blocked until an authoritative source has been recorded.
 - Explicit deny rules override a supplied approval.
 - Run receipts use a full SHA-256 content fingerprint; the display ID is a
@@ -181,7 +183,10 @@ preventing a resumed session from silently changing its detector policy.
 - Detection is lexical and deterministic. It does not verify whether the
   source itself is true, align every paraphrase semantically, or understand
   every domain-specific unit and policy language. Custom rules can extend the
-  three inspectable families but remain responsible for their own quality.
+  three inspectable families but remain responsible for their own quality. An
+  optional semantic judge can cover harder paraphrases through
+  `inspectHandoffAsync`, `runAgent`, and `runSequence`, but its quality and cost
+  belong to the host.
 - The SDK assumes the host owns the actual tool boundary. Code that can bypass
   the wrapper can also bypass LineageGuard.
 - A `LineageGuardSession` is a serial state machine. DAG analysis is supported,

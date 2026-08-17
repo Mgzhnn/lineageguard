@@ -2,6 +2,41 @@
 
 All notable changes to LineageGuard are documented here.
 
+## 0.7.0
+
+- Failed closed when either side of a handoff is blank instead of silently
+  reporting an unverifiable transition as clean.
+- Kept numeric claims out of lexical guardrail-retention scoring so an
+  equivalent range rewrite cannot be mislabeled as the first bad handoff.
+- Displayed the current product release in the website hero instead of the
+  older internal pipeline schema version.
+- Made the website's SDK example importable and linked visitors directly to
+  the npm package and source repository.
+- Updated the web and build dependency chain, added a high-severity audit gate,
+  and documented the two reviewed, development-only Vinext parser exceptions.
+- Added a trusted-publishing release workflow and a packed-SDK smoke test on
+  the advertised Node.js 20 minimum.
+- Added explicit `deterministic`, `hybrid`, and `semantic` runtime analysis
+  modes. Semantic-only mode requires the asynchronous judge and disables the
+  built-in lexical findings for handoff decisions.
+- Prevented synchronous inspection from silently bypassing the semantic judge
+  in hybrid or semantic mode.
+- Removed the Korean-specific lexical, guardrail, date, magnitude, unit, test,
+  and evaluation rules to keep the built-in deterministic surface English-only.
+- Reduced the curated English regression set to 33 cases after removing the
+  five Korean-specific cases.
+
+## 0.6.0
+
+- Added `inspectHandoffAsync()` so existing framework loops can apply the
+  optional semantic judge before the deterministic handoff gate.
+- Added asynchronous approval verification for production services backed by
+  databases, policy engines, or remote identity systems.
+- Reserved one-time approval tokens while asynchronous verification is in
+  progress, preventing concurrent executions from racing the same token.
+- Added regression coverage for async semantic inspection, async approval
+  execution, token reservation, and idempotent semantic review.
+
 ## 0.5.1
 
 - Published the local-first forensic workspace as a free interactive demo.
