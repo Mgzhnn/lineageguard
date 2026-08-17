@@ -26,6 +26,7 @@ every new package that requests a build script.
 ## 2. Run the release gate
 
 ```bash
+pnpm run audit:security
 pnpm run verify
 ```
 
@@ -47,20 +48,37 @@ Confirm the tarball contains `dist/sdk`, `dist/lib`, declaration files,
 source maps, `README.md`, `LICENSE`, and `package.json`. It must not contain
 the website, tests, environment files, or repository tooling.
 
-## 4. Publish intentionally
+## 4. Configure trusted publishing once
+
+On npmjs.com, configure the `lineageguard` package's trusted publisher with:
+
+- provider: GitHub Actions;
+- repository: `Mgzhnn/lineageguard`;
+- workflow filename: `publish.yml`;
+- environment: `npm`;
+- allowed action: `npm publish`.
+
+Create the matching GitHub `npm` environment and require maintainer approval.
+Protect release tags so only reviewed commits can trigger a release. The
+workflow uses short-lived OIDC credentials and does not require an npm token.
+
+## 5. Publish intentionally
 
 Verify that the Git worktree is clean and that the release commit and tag are
-on GitHub. From an npm-authenticated maintainer environment:
+on the default branch. Push the matching version tag:
 
 ```bash
-pnpm --dir sdk publish --access public --provenance
+git tag v0.7.0
+git push origin v0.7.0
 ```
 
-Publishing requires maintainer credentials or an npm trusted-publishing
-configuration. Those external permissions cannot be encoded safely in this
-repository.
+The `publish.yml` workflow verifies the tag, package versions, security audit,
+application, SDK tarball, and examples before invoking `npm publish`. npm
+trusted publishing automatically records provenance for a public package from
+a public repository. Do not publish 0.7.0 until the 0.7.0 release commit is on
+the default branch; a registry version can never be reused.
 
-## 5. Deploy the optional site
+## 6. Deploy the optional site
 
 The SDK works without the website. Site deployment is a separate release
 using the existing `.openai/hosting.json` project. Configure hosted
