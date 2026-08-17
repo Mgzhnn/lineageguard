@@ -1,0 +1,53 @@
+name: Publish SDK
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Install Node.js and configure npm
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.18.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release tag and package versions
+        run: node scripts/verify-release-tag.mjs "${{ github.ref_name }}"
+
+      - name: Audit high-severity dependency advisories
+        run: pnpm run audit:security
+
+      - name: Verify application and distributable SDK
+        run: pnpm run verify
+
+      - name: Publish with npm trusted publishing
+        working-directory: sdk
+        run: npm publish --access public

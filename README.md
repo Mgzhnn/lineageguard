@@ -32,7 +32,8 @@ radius, and prepares the smallest safe retry. It doesn't just observe — it
 **blocks** unsafe handoffs and unapproved tool calls before they execute.
 
 No model API, account, database, analytics service, or paid service is
-required for local analysis. English and Korean are covered out of the box.
+required for deterministic local analysis. The built-in lexical rules cover
+English; dynamic semantic analysis is available through a host-provided judge.
 
 ## One product, five surfaces
 
@@ -52,13 +53,13 @@ Every run passes through seven visible modules:
 2. **Claim Lineage Mapper** builds an ancestry graph for the claim.
 3. **Evidence Sentinel** watches numbers, ranges, quantities, dates, and units.
    Equivalent rewrites of the same value — `$5k` vs `$5,000`, `500mg` vs
-   `0.5g`, `2026-07-24` vs `July 24, 2026`, `5만원` vs `₩50,000`, "three
-   customers" vs "3 customers" — canonicalize to the same claim and do not
+   `0.5g`, `2026-07-24` vs `July 24, 2026`, and "three customers" vs
+   "3 customers" — canonicalize to the same claim and do not
    trigger a warning; a changed value behind the same rewrites still does.
-4. **Meaning Sentinel** watches confidence, scope, and negation, with English
-   and Korean lexicons.
-5. **Authority Firewall** enforces inherited restrictions and approval gates
-   in English and Korean.
+4. **Meaning Sentinel** watches confidence, scope, and negation with built-in
+   English rules or a dynamic semantic judge.
+5. **Authority Firewall** enforces English restrictions and approval gates;
+   semantic mode can delegate broader language understanding to the judge.
 6. **Contamination Tracer** identifies descendants of the first failed handoff.
 7. **Recovery Orchestrator** freezes unsafe descendants and creates a minimal
    rollback-and-retry packet.
@@ -182,6 +183,7 @@ deterministic gate:
 
 ```ts
 const guard = new LineageGuardSession({
+  analysisMode: "semantic",
   semanticJudge: async ({ from, proposedOutput }) => {
     const verdict = await llmReview(from.text, proposedOutput);
     return verdict.changed
@@ -191,11 +193,32 @@ const guard = new LineageGuardSession({
 });
 ```
 
+`analysisMode` has three values:
+
+- `"deterministic"`: offline English lexical and numeric rules only.
+- `"hybrid"`: deterministic rules plus the dynamic semantic judge.
+- `"semantic"`: judge-only handoff decisions, with no lexical fallback.
+
+Hybrid is the recommended production mode: the model handles nuanced meaning,
+while stable numeric and authority checks remain reproducible. Semantic-only
+mode is available when fully dynamic behavior matters more than repeatability,
+but it requires a model or semantic service and inherits that provider's
+latency, cost, variability, and failure modes.
+
 Judge findings are merged into the report as inspectable meaning-family
 issues and persist through snapshots. If the judge itself fails, the handoff
 fails closed by default (`semanticJudgeFailureMode: "warn"` downgrades that to
 a visible low-severity note). The core stays dependency-free: no judge, no
 model call. Run the executable demo with `pnpm demo:semantic`.
+
+Existing orchestration loops should call `await guard.inspectHandoffAsync(...)`
+to include the semantic judge. The synchronous `inspectHandoff(...)` method is
+kept for deterministic-only, latency-sensitive paths.
+
+Analysis modes currently apply to the live `LineageGuardSession` runtime. The
+synchronous chain/DAG builders, OTLP adapter, browser workspace, and HTTP gate
+remain deterministic; a host can run a semantic reviewer around those edges or
+convert the workflow to the session runtime when dynamic decisions are needed.
 
 ## Analyze branches and merges
 
@@ -325,9 +348,9 @@ pnpm build
 pnpm test:render
 ```
 
-The current `curated-regression-v2` set contains 38 deliberately small
-positive and negative cases, including equivalence rewrites that must stay
-clean and Korean-language mutations that must block:
+The current `curated-regression-v2` set contains 33 deliberately small
+positive and negative English cases, including equivalence rewrites that must
+stay clean and structural mutations that must block:
 
 | Metric | Result |
 | --- | --- |
@@ -373,8 +396,8 @@ service is required for local use.
 
 | Concern | Answer |
 | --- | --- |
-| API cost | $0 |
-| Network during analysis | None |
+| API cost | $0 in deterministic mode; judge-provider pricing in hybrid/semantic mode |
+| Network during analysis | None in deterministic mode; judge-defined in hybrid/semantic mode |
 | Storage | Trace input stays in React state; nothing is written to a server |
 | Import | JSON files are parsed locally and limited to 2 MB in the UI |
 | Export | Reports, recovery packets, and JSON are generated locally |
@@ -387,9 +410,9 @@ is separate from analyzing a trace.
 LineageGuard is a smoke detector, not a truth machine. It catches explicit
 structural mutations but can miss subtle paraphrases, sarcasm, and a false
 claim that remains unchanged. It can also warn on a harmless rewrite. The
-meaning and authority lexicons currently cover English and Korean; other
-languages raise a coverage signal rather than a verdict, and Latin-script
-languages other than English are not distinguished by the coverage check.
+built-in meaning and authority lexicons cover English. Other scripts raise
+a coverage signal rather than a deterministic verdict; use semantic mode or a
+domain rule when broader language understanding is required.
 Number canonicalization interprets bare `k` and currency-prefixed `m`/`b`
 magnitudes, complete dates, and common metric units; ambiguous partial forms
 stay literal. Domain teams can add inspectable `CustomLineageRule` extensions

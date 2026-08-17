@@ -97,7 +97,7 @@ test("packs and installs the real SDK tarball in an isolated consumer", async ()
       import { analyzeLineage } from "lineageguard/analysis";
       import { runReliabilityPipeline } from "lineageguard/pipeline";
 
-      assert.equal(PRODUCT_VERSION, "0.5.1");
+      assert.equal(PRODUCT_VERSION, "0.7.0");
       assert.equal(typeof LineageGuardRun, "function");
       assert.equal(typeof LineageGuardSession, "function");
       assert.equal(typeof LineageGuardGraphRun, "function");

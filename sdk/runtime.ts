@@ -59,7 +59,7 @@ export type ToolApprovalContext = {
 
 export type ToolApprovalVerifier = (
   context: Readonly<ToolApprovalContext>,
-) => boolean;
+) => boolean | Promise<boolean>;
 
 export type RegisteredTool<TInput = never, TResult = unknown> = {
   name: string;
@@ -102,8 +102,9 @@ export type SemanticJudgeContext = {
  * Optional asynchronous reviewer for a proposed handoff — typically an LLM
  * call — that runs before the deterministic gate. Findings it returns are
  * merged into the reliability report as inspectable meaning-family issues.
- * Judge findings apply through `runAgent`/`runSequence`; the synchronous
- * `inspectHandoff` path stays deterministic-only.
+ * Judge findings apply through `inspectHandoffAsync`, `runAgent`, and
+ * `runSequence`; the synchronous `inspectHandoff` path stays
+ * deterministic-only.
  */
 export type SemanticJudge = (
   context: Readonly<SemanticJudgeContext>,
@@ -111,6 +112,8 @@ export type SemanticJudge = (
   | SemanticJudgeFinding[]
   | null
   | Promise<SemanticJudgeFinding[] | null>;
+
+export type AnalysisMode = "deterministic" | "hybrid" | "semantic";
 
 export const SEMANTIC_JUDGE_RULE_ID = "lineageguard:semantic-judge";
 
@@ -123,6 +126,12 @@ export type LineageGuardSessionOptions = {
   rules?: readonly CustomLineageRule[];
   approvalVerifier?: ToolApprovalVerifier;
   semanticJudge?: SemanticJudge;
+  /**
+   * deterministic: built-in lexical rules only.
+   * hybrid: built-in rules plus the semantic judge.
+   * semantic: semantic judge only; synchronous handoff inspection is disabled.
+   */
+  analysisMode?: AnalysisMode;
   /**
    * What happens when the semantic judge itself throws or rejects.
    * "block" (default) records a high-severity finding so the handoff fails
@@ -207,6 +216,8 @@ export type LineageGuardSessionSnapshot = {
   runName: string;
   guardrail: string;
   blockAtOrAbove: Severity;
+  /** Absent in snapshots created before analysis modes were introduced. */
+  analysisMode?: AnalysisMode;
   toolPolicy: ToolPolicy;
   exposeSessionToAgents: boolean;
   ruleIds: string[];
@@ -426,6 +437,14 @@ function validateSnapshot(snapshot: LineageGuardSessionSnapshot) {
     throw new Error("Snapshot blocking threshold is invalid.");
   }
   if (
+    snapshot.analysisMode !== undefined &&
+    snapshot.analysisMode !== "deterministic" &&
+    snapshot.analysisMode !== "hybrid" &&
+    snapshot.analysisMode !== "semantic"
+  ) {
+    throw new Error("Snapshot analysis mode is invalid.");
+  }
+  if (
     !snapshot.toolPolicy ||
     typeof snapshot.toolPolicy !== "object" ||
     Array.isArray(snapshot.toolPolicy)
@@ -628,6 +647,7 @@ export class LineageGuardSession {
   readonly runName: string;
   private readonly guardrail: string;
   private readonly blockAtOrAbove: Severity;
+  private readonly analysisMode: AnalysisMode;
   private readonly toolPolicy: ToolPolicy;
   private readonly rules: readonly CustomLineageRule[];
   private readonly approvalVerifier?: ToolApprovalVerifier;
@@ -643,6 +663,7 @@ export class LineageGuardSession {
   private readonly eventSinkFailureMode: "ignore" | "throw";
   private readonly tools = new Map<string, RegisteredTool>();
   private readonly consumedApprovalTokenFingerprints = new Set<string>();
+  private readonly pendingApprovalTokenFingerprints = new Set<string>();
   private readonly toolExecutions = new Map<string, ToolExecutionRecord>();
   private readonly handoffRequests = new Map<string, HandoffRequestRecord>();
   private stages: TraceStage[] = [];
@@ -672,6 +693,24 @@ export class LineageGuardSession {
       throw new Error("The semantic judge must be a function.");
     }
     this.semanticJudge = options.semanticJudge;
+    if (
+      options.analysisMode !== undefined &&
+      options.analysisMode !== "deterministic" &&
+      options.analysisMode !== "hybrid" &&
+      options.analysisMode !== "semantic"
+    ) {
+      throw new Error(
+        "Analysis mode must be deterministic, hybrid, or semantic.",
+      );
+    }
+    this.analysisMode =
+      options.analysisMode ??
+      (this.semanticJudge ? "hybrid" : "deterministic");
+    if (this.analysisMode !== "deterministic" && !this.semanticJudge) {
+      throw new Error(
+        `${this.analysisMode} analysis mode requires a semanticJudge.`,
+      );
+    }
     if (
       options.semanticJudgeFailureMode !== undefined &&
       options.semanticJudgeFailureMode !== "block" &&
@@ -713,6 +752,20 @@ export class LineageGuardSession {
   }
 
   inspectHandoff(
+    agentId: string,
+    agentName: string,
+    output: string,
+    options: HandoffOptions = {},
+  ) {
+    if (this.analysisMode !== "deterministic") {
+      throw new Error(
+        `${this.analysisMode} analysis mode requires inspectHandoffAsync() so the semantic judge cannot be skipped.`,
+      );
+    }
+    return this.commitHandoff(agentId, agentName, output, options);
+  }
+
+  private commitHandoff(
     agentId: string,
     agentName: string,
     output: string,
@@ -798,6 +851,46 @@ export class LineageGuardSession {
     return decision;
   }
 
+  /**
+   * Runs the optional semantic judge before applying the deterministic
+   * handoff gate. Existing framework loops should use this method whenever a
+   * semantic judge is configured.
+   */
+  async inspectHandoffAsync(
+    agentId: string,
+    agentName: string,
+    output: string,
+    options: HandoffOptions = {},
+  ): Promise<HandoffDecision> {
+    const idempotencyKey = cleanOptionalText(
+      options.idempotencyKey,
+      "Handoff idempotency key",
+    );
+    if (idempotencyKey) {
+      const requestFingerprint = fingerprintValue({
+        agentId: agentId.trim(),
+        agentName: agentName.trim(),
+        output,
+      });
+      const existing = this.handoffRequests.get(idempotencyKey);
+      if (existing) {
+        if (existing.requestFingerprint !== requestFingerprint) {
+          throw new LineageGuardDuplicateExecutionError(
+            idempotencyKey,
+            "The handoff idempotency key was reused with different input.",
+          );
+        }
+        return existing.decision;
+      }
+    }
+
+    this.assertRunnable();
+    if (this.analysisMode !== "deterministic") {
+      await this.applySemanticJudge(agentId, agentName, output);
+    }
+    return this.commitHandoff(agentId, agentName, output, options);
+  }
+
   async runAgent<TContext>(
     agent: GuardedAgent<TContext>,
     context: TContext,
@@ -812,8 +905,7 @@ export class LineageGuardSession {
         guard: this.exposeSessionToAgents ? this : undefined,
         tools: this.getToolClient(),
       });
-      await this.applySemanticJudge(agent.id, agent.name, output);
-      return this.inspectHandoff(agent.id, agent.name, output);
+      return this.inspectHandoffAsync(agent.id, agent.name, output);
     } catch (error) {
       this.emit(
         "agent-failed",
@@ -916,6 +1008,73 @@ export class LineageGuardSession {
   }
 
   authorizeTool<TInput>(intent: ToolIntent<TInput>): ToolDecision<TInput> {
+    const prepared = this.prepareToolAuthorization(intent);
+    if (prepared.decision) return prepared.decision;
+
+    let approvalVerified = false;
+    if (prepared.requiresApproval) {
+      try {
+        const verification = this.approvalVerifier!(
+          this.approvalContext(
+            prepared.intent,
+            prepared.inputFingerprint,
+          ),
+        );
+        if (
+          typeof verification === "object" &&
+          verification !== null &&
+          "then" in verification
+        ) {
+          void Promise.resolve(verification).catch(() => undefined);
+          return this.toolDecision(
+            "approval-required",
+            "The approval verifier is asynchronous. Use authorizeToolAsync() or executeTool() so it can be awaited safely.",
+            prepared.intent,
+            prepared.inputFingerprint,
+            true,
+          );
+        }
+        approvalVerified = verification === true;
+      } catch {
+        return this.toolDecision(
+          "blocked",
+          "The approval verifier failed closed.",
+          prepared.intent,
+          prepared.inputFingerprint,
+          true,
+        );
+      }
+      if (!approvalVerified) {
+        return this.toolDecision(
+          "approval-required",
+          "The supplied approval is invalid or does not match this action.",
+          prepared.intent,
+          prepared.inputFingerprint,
+          true,
+        );
+      }
+    }
+
+    return this.allowedToolDecision(prepared, approvalVerified);
+  }
+
+  /**
+   * Asynchronous authorization preflight. Unlike executeTool(), this does not
+   * consume a one-time approval token; execution verifies it again and
+   * consumes it atomically before invoking the tool implementation.
+   */
+  authorizeToolAsync<TInput>(
+    intent: ToolIntent<TInput>,
+  ): Promise<ToolDecision<TInput>> {
+    return this.authorizeToolWithAsyncVerifier(intent, false);
+  }
+
+  private prepareToolAuthorization<TInput>(intent: ToolIntent<TInput>): {
+    decision?: ToolDecision<TInput>;
+    intent: ToolIntent<TInput>;
+    inputFingerprint: string;
+    requiresApproval: boolean;
+  } {
     const toolName = cleanText(intent.toolName, "Tool name");
     const action = cleanText(intent.action, "Tool action");
     const inputFingerprint = fingerprintValue(intent.input);
@@ -933,28 +1092,43 @@ export class LineageGuardSession {
     };
 
     if (!this.stages.length) {
-      return this.toolDecision(
-        "blocked",
-        "Record an authoritative source before using tools.",
-        normalizedIntent,
+      return {
+        decision: this.toolDecision(
+          "blocked",
+          "Record an authoritative source before using tools.",
+          normalizedIntent,
+          inputFingerprint,
+        ),
+        intent: normalizedIntent,
         inputFingerprint,
-      );
+        requiresApproval: false,
+      };
     }
     if (this.frozen) {
-      return this.toolDecision(
-        "blocked",
-        "The run is frozen after a failed handoff. Recover before using tools.",
-        normalizedIntent,
+      return {
+        decision: this.toolDecision(
+          "blocked",
+          "The run is frozen after a failed handoff. Recover before using tools.",
+          normalizedIntent,
+          inputFingerprint,
+        ),
+        intent: normalizedIntent,
         inputFingerprint,
-      );
+        requiresApproval: false,
+      };
     }
     if (matchesTool(toolName, this.toolPolicy.deniedTools)) {
-      return this.toolDecision(
-        "blocked",
-        `${toolName} is explicitly denied by the runtime tool policy.`,
-        normalizedIntent,
+      return {
+        decision: this.toolDecision(
+          "blocked",
+          `${toolName} is explicitly denied by the runtime tool policy.`,
+          normalizedIntent,
+          inputFingerprint,
+        ),
+        intent: normalizedIntent,
         inputFingerprint,
-      );
+        requiresApproval: false,
+      };
     }
 
     const explicitlyAllowed = matchesTool(
@@ -973,61 +1147,143 @@ export class LineageGuardSession {
       !explicitlyAllowed &&
       (this.toolPolicy.defaultSideEffectMode ?? "require-approval") === "deny"
     ) {
-      return this.toolDecision(
-        "blocked",
-        `${toolName} is a side-effecting tool and the default policy is deny.`,
-        normalizedIntent,
+      return {
+        decision: this.toolDecision(
+          "blocked",
+          `${toolName} is a side-effecting tool and the default policy is deny.`,
+          normalizedIntent,
+          inputFingerprint,
+        ),
+        intent: normalizedIntent,
         inputFingerprint,
-      );
+        requiresApproval,
+      };
     }
 
-    let approvalVerified = false;
     if (requiresApproval) {
       const approval = normalizedIntent.approval;
       if (!approval?.token.trim() || !approval.approvedBy.trim()) {
-        return this.toolDecision(
-          "approval-required",
-          `${toolName} needs a scoped approval token from an authenticated reviewer.`,
-          normalizedIntent,
+        return {
+          decision: this.toolDecision(
+            "approval-required",
+            `${toolName} needs a scoped approval token from an authenticated reviewer.`,
+            normalizedIntent,
+            inputFingerprint,
+            true,
+          ),
+          intent: normalizedIntent,
           inputFingerprint,
-          true,
-        );
+          requiresApproval,
+        };
       }
       const tokenFingerprint = sha256Hex(approval.token);
-      if (this.consumedApprovalTokenFingerprints.has(tokenFingerprint)) {
-        return this.toolDecision(
-          "blocked",
-          "This approval token has already been consumed.",
-          normalizedIntent,
+      if (
+        this.consumedApprovalTokenFingerprints.has(tokenFingerprint) ||
+        this.pendingApprovalTokenFingerprints.has(tokenFingerprint)
+      ) {
+        return {
+          decision: this.toolDecision(
+            "blocked",
+            this.pendingApprovalTokenFingerprints.has(tokenFingerprint)
+              ? "This approval token is already being verified or used."
+              : "This approval token has already been consumed.",
+            normalizedIntent,
+            inputFingerprint,
+            true,
+          ),
+          intent: normalizedIntent,
           inputFingerprint,
-          true,
-        );
+          requiresApproval,
+        };
       }
       if (!this.approvalVerifier) {
-        return this.toolDecision(
-          "approval-required",
-          "No approval verifier is configured for this session.",
-          normalizedIntent,
+        return {
+          decision: this.toolDecision(
+            "approval-required",
+            "No approval verifier is configured for this session.",
+            normalizedIntent,
+            inputFingerprint,
+            true,
+          ),
+          intent: normalizedIntent,
           inputFingerprint,
-          true,
-        );
+          requiresApproval,
+        };
       }
+    }
+
+    return {
+      intent: normalizedIntent,
+      inputFingerprint,
+      requiresApproval,
+    };
+  }
+
+  private approvalContext<TInput>(
+    intent: ToolIntent<TInput>,
+    inputFingerprint: string,
+  ): Readonly<ToolApprovalContext> {
+    return {
+      sessionId: this.sessionId,
+      runId: this.getReport().id,
+      toolName: intent.toolName,
+      action: intent.action,
+      inputFingerprint,
+      approval: intent.approval!,
+    };
+  }
+
+  private allowedToolDecision<TInput>(
+    prepared: {
+      intent: ToolIntent<TInput>;
+      inputFingerprint: string;
+      requiresApproval: boolean;
+    },
+    approvalVerified: boolean,
+  ) {
+    return this.toolDecision(
+      "allowed",
+      approvalVerified
+        ? `Scoped approval verified for ${prepared.intent.approval?.approvedBy}.`
+        : prepared.intent.sideEffect
+          ? `${prepared.intent.toolName} is explicitly allowed by host policy.`
+          : `${prepared.intent.toolName} is read-only.`,
+      prepared.intent,
+      prepared.inputFingerprint,
+      prepared.requiresApproval,
+      approvalVerified,
+    );
+  }
+
+  private async authorizeToolWithAsyncVerifier<TInput>(
+    intent: ToolIntent<TInput>,
+    consumeApproval: boolean,
+  ): Promise<ToolDecision<TInput>> {
+    const prepared = this.prepareToolAuthorization(intent);
+    if (prepared.decision) return prepared.decision;
+    if (!prepared.requiresApproval) {
+      return this.allowedToolDecision(prepared, false);
+    }
+
+    const approval = prepared.intent.approval!;
+    const tokenFingerprint = sha256Hex(approval.token);
+    this.pendingApprovalTokenFingerprints.add(tokenFingerprint);
+    try {
+      let approvalVerified = false;
       try {
         approvalVerified =
-          this.approvalVerifier({
-            sessionId: this.sessionId,
-            runId: this.getReport().id,
-            toolName,
-            action,
-            inputFingerprint,
-            approval,
-          }) === true;
+          (await this.approvalVerifier!(
+            this.approvalContext(
+              prepared.intent,
+              prepared.inputFingerprint,
+            ),
+          )) === true;
       } catch {
         return this.toolDecision(
           "blocked",
           "The approval verifier failed closed.",
-          normalizedIntent,
-          inputFingerprint,
+          prepared.intent,
+          prepared.inputFingerprint,
           true,
         );
       }
@@ -1035,25 +1291,18 @@ export class LineageGuardSession {
         return this.toolDecision(
           "approval-required",
           "The supplied approval is invalid or does not match this action.",
-          normalizedIntent,
-          inputFingerprint,
+          prepared.intent,
+          prepared.inputFingerprint,
           true,
         );
       }
+      if (consumeApproval) {
+        this.consumedApprovalTokenFingerprints.add(tokenFingerprint);
+      }
+      return this.allowedToolDecision(prepared, true);
+    } finally {
+      this.pendingApprovalTokenFingerprints.delete(tokenFingerprint);
     }
-
-    return this.toolDecision(
-      "allowed",
-      approvalVerified
-        ? `Scoped approval verified for ${normalizedIntent.approval?.approvedBy}.`
-        : normalizedIntent.sideEffect
-          ? `${toolName} is explicitly allowed by host policy.`
-          : `${toolName} is read-only.`,
-      normalizedIntent,
-      inputFingerprint,
-      requiresApproval,
-      approvalVerified,
-    );
   }
 
   async executeTool<TInput, TResult>(
@@ -1094,19 +1343,15 @@ export class LineageGuardSession {
       }
     }
 
-    const decision = this.authorizeTool(intent);
-    if (decision.status !== "allowed") {
-      throw new LineageGuardBlockedError(decision);
-    }
-    if (decision.requiresApproval && decision.intent.approval) {
-      this.consumedApprovalTokenFingerprints.add(
-        sha256Hex(decision.intent.approval.token),
-      );
-    }
-
-    const executionPromise = Promise.resolve().then(() =>
-      execute(decision.intent.input as TInput),
-    );
+    let authorizationSucceeded = false;
+    const executionPromise = (async () => {
+      const decision = await this.authorizeToolWithAsyncVerifier(intent, true);
+      if (decision.status !== "allowed") {
+        throw new LineageGuardBlockedError(decision);
+      }
+      authorizationSucceeded = true;
+      return execute(decision.intent.input as TInput);
+    })();
     const record: ToolExecutionRecord | undefined = idempotencyKey
       ? {
           idempotencyKey,
@@ -1128,9 +1373,16 @@ export class LineageGuardSession {
       return result;
     } catch (error) {
       if (record) {
-        record.status = "failed";
-        record.promise = undefined;
-        record.error = error;
+        if (
+          !authorizationSucceeded &&
+          error instanceof LineageGuardBlockedError
+        ) {
+          this.toolExecutions.delete(idempotencyKey!);
+        } else {
+          record.status = "failed";
+          record.promise = undefined;
+          record.error = error;
+        }
       }
       throw error;
     }
@@ -1179,6 +1431,7 @@ export class LineageGuardSession {
       runName: this.runName,
       guardrail: this.guardrail,
       blockAtOrAbove: this.blockAtOrAbove,
+      analysisMode: this.analysisMode,
       toolPolicy: cloneToolPolicy(this.toolPolicy),
       exposeSessionToAgents: this.exposeSessionToAgents,
       ruleIds: this.rules.map((rule) => rule.id.trim()),
@@ -1245,6 +1498,7 @@ export class LineageGuardSession {
       runName: snapshot.runName,
       guardrail: snapshot.guardrail,
       blockAtOrAbove: snapshot.blockAtOrAbove,
+      analysisMode: snapshot.analysisMode,
       toolPolicy: snapshot.toolPolicy,
       exposeSessionToAgents: snapshot.exposeSessionToAgents,
       ...options,
@@ -1348,7 +1602,9 @@ export class LineageGuardSession {
           title: "Semantic judge unavailable",
           explanation: failClosed
             ? `The configured semantic judge failed (${message}). Failing closed: this handoff needs human review before downstream agents run.`
-            : `The configured semantic judge failed (${message}). The deterministic rule families still apply, but semantic drift was not reviewed for this handoff.`,
+            : this.analysisMode === "semantic"
+              ? `The configured semantic judge failed (${message}). Semantic-only mode has no lexical fallback, so this low-severity failure signal is the only review evidence for the handoff.`
+              : `The configured semantic judge failed (${message}). The deterministic rule families still apply, but semantic drift was not reviewed for this handoff.`,
         },
       ]);
       this.emit(
@@ -1386,6 +1642,7 @@ export class LineageGuardSession {
     return runReliabilityPipeline(stages, this.guardrail, {
       recoveryTransitionIndex,
       rules,
+      includeBuiltInRules: this.analysisMode !== "semantic",
     });
   }
 

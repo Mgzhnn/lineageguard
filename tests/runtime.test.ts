@@ -117,9 +117,9 @@ test("allows read-only tools and approved external actions", async () => {
   assert.equal(sent.sent, true);
 });
 
-test("fails closed when a host supplies an asynchronous approval verifier", () => {
+test("sync approval preflight routes asynchronous verifiers to the async API", () => {
   const guard = new LineageGuardSession({
-    approvalVerifier: (() => Promise.resolve(true)) as never,
+    approvalVerifier: () => Promise.resolve(true),
   }).recordSource("Request", "Prepare an email.");
 
   const decision = guard.authorizeTool({
@@ -135,6 +135,89 @@ test("fails closed when a host supplies an asynchronous approval verifier", () =
 
   assert.equal(decision.status, "approval-required");
   assert.equal(decision.approvalVerified, false);
+  assert.match(decision.reason, /authorizeToolAsync/);
+});
+
+test("awaits an asynchronous approval verifier before executing", async () => {
+  let verifierCalls = 0;
+  let executionCalls = 0;
+  const guard = new LineageGuardSession({
+    approvalVerifier: async ({ approval }) => {
+      verifierCalls += 1;
+      await Promise.resolve();
+      return approval.token === "signed-approval";
+    },
+  }).recordSource("Request", "Prepare an email.");
+
+  const result = await guard.executeTool(
+    {
+      toolName: "send-email",
+      action: "Send email",
+      input: "message",
+      sideEffect: true,
+      approval: {
+        token: "signed-approval",
+        approvedBy: "reviewer@example.com",
+      },
+    },
+    (input) => {
+      executionCalls += 1;
+      return `sent:${input}`;
+    },
+  );
+
+  assert.equal(result, "sent:message");
+  assert.equal(verifierCalls, 1);
+  assert.equal(executionCalls, 1);
+});
+
+test("reserves a one-time approval token during asynchronous verification", async () => {
+  let releaseVerifier!: () => void;
+  let markVerifierStarted!: () => void;
+  const verifierStarted = new Promise<void>((resolve) => {
+    markVerifierStarted = resolve;
+  });
+  const verifierReleased = new Promise<void>((resolve) => {
+    releaseVerifier = resolve;
+  });
+  let executionCalls = 0;
+  const guard = new LineageGuardSession({
+    approvalVerifier: async () => {
+      markVerifierStarted();
+      await verifierReleased;
+      return true;
+    },
+  }).recordSource("Request", "Prepare an email.");
+  const intent = {
+    toolName: "send-email",
+    action: "Send email",
+    input: "message",
+    sideEffect: true,
+    approval: {
+      token: "one-time-token",
+      approvedBy: "reviewer@example.com",
+    },
+  };
+
+  const first = guard.executeTool(intent, () => {
+    executionCalls += 1;
+    return "sent";
+  });
+  await verifierStarted;
+
+  await assert.rejects(
+    guard.executeTool(intent, () => {
+      executionCalls += 1;
+      return "sent-again";
+    }),
+    (error: unknown) =>
+      error instanceof LineageGuardBlockedError &&
+      /already being verified or used/i.test(error.message),
+  );
+
+  releaseVerifier();
+  assert.equal(await first, "sent");
+  assert.equal(executionCalls, 1);
 });
 
 test("restores a checkpoint and retries only the failed agent", async () => {
@@ -360,6 +443,43 @@ test("deduplicates tool execution by operation fingerprint", async () => {
     ),
     LineageGuardDuplicateExecutionError,
   );
+});
+
+test("deduplicates concurrent tool execution before authorization resolves", async () => {
+  let releaseExecution!: () => void;
+  const executionReleased = new Promise<void>((resolve) => {
+    releaseExecution = resolve;
+  });
+  let executions = 0;
+  const guard = new LineageGuardSession().recordSource(
+    "Request",
+    "Read a customer record.",
+  );
+  const intent = {
+    toolName: "customer-read",
+    action: "Read customer",
+    input: "CUS-42",
+    sideEffect: false,
+    idempotencyKey: "concurrent-read-42",
+  };
+
+  const first = guard.executeTool(intent, async () => {
+    executions += 1;
+    await executionReleased;
+    return { tier: "standard" };
+  });
+  const duplicate = guard.executeTool(intent, () => {
+    executions += 1;
+    return { tier: "wrong" };
+  });
+
+  releaseExecution();
+  const [firstResult, duplicateResult] = await Promise.all([
+    first,
+    duplicate,
+  ]);
+  assert.deepEqual(duplicateResult, firstResult);
+  assert.equal(executions, 1);
 });
 
 test("deduplicates handoff recording and rejects key reuse", () => {
@@ -595,6 +715,100 @@ test("blocks a paraphrase flagged by the semantic judge", async () => {
   assert.equal(issue.family, "meaning");
 });
 
+test("requires a semantic judge for hybrid and semantic modes", () => {
+  assert.throws(
+    () => new LineageGuardSession({ analysisMode: "hybrid" }),
+    /requires a semanticJudge/i,
+  );
+  assert.throws(
+    () => new LineageGuardSession({ analysisMode: "semantic" }),
+    /requires a semanticJudge/i,
+  );
+});
+
+test("semantic mode uses dynamic findings without deterministic fallback", async () => {
+  let judgeCalls = 0;
+  const guard = new LineageGuardSession({
+    analysisMode: "semantic",
+    semanticJudge: () => {
+      judgeCalls += 1;
+      return null;
+    },
+  }).recordSource("Source", "Some users may save 5%.");
+
+  assert.throws(
+    () =>
+      guard.inspectHandoff(
+        "writer",
+        "Writer",
+        "All users are guaranteed to save 50%.",
+      ),
+    /inspectHandoffAsync/i,
+  );
+
+  const decision = await guard.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "All users are guaranteed to save 50%.",
+  );
+  assert.equal(decision.status, "allowed");
+  assert.equal(decision.report.analysis.issues.length, 0);
+  assert.equal(judgeCalls, 1);
+});
+
+test("hybrid mode keeps deterministic evidence checks", async () => {
+  const guard = new LineageGuardSession({
+    analysisMode: "hybrid",
+    semanticJudge: () => null,
+  }).recordSource("Source", "Some users may save 5%.");
+
+  const decision = await guard.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "Some users may save 50%.",
+  );
+  assert.equal(decision.status, "blocked");
+  assert.ok(
+    decision.report.analysis.issues.some((issue) => issue.type === "number"),
+  );
+});
+
+test("applies the semantic judge in an existing framework loop", async () => {
+  let judgeCalls = 0;
+  const guard = new LineageGuardSession({
+    analysisMode: "semantic",
+    semanticJudge: ({ proposedOutput }) => {
+      judgeCalls += 1;
+      return proposedOutput.includes("finished")
+        ? [
+            {
+              severity: "high",
+              title: "Status changed",
+              explanation: "An in-progress review became a finished review.",
+            },
+          ]
+        : null;
+    },
+  }).recordSource("Source", "The safety review is still in progress.");
+
+  const decision = await guard.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "The safety review finished.",
+    { idempotencyKey: "writer-1" },
+  );
+  const duplicate = await guard.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "The safety review finished.",
+    { idempotencyKey: "writer-1" },
+  );
+
+  assert.equal(decision.status, "blocked");
+  assert.equal(duplicate, decision);
+  assert.equal(judgeCalls, 1);
+});
+
 test("semantic judge failures fail closed by default and warn when configured", async () => {
   const failingJudge = () => {
     throw new Error("judge offline");
@@ -649,15 +863,16 @@ test("persists semantic findings through snapshots", async () => {
       saved = snapshot;
     },
   };
+  const semanticJudge = () => [
+    {
+      severity: "high" as const,
+      title: "Semantic drift",
+      explanation: "The paraphrase changed the claim.",
+    },
+  ];
   const guard = new LineageGuardSession({
     sessionId: "judge-session",
-    semanticJudge: () => [
-      {
-        severity: "high",
-        title: "Semantic drift",
-        explanation: "The paraphrase changed the claim.",
-      },
-    ],
+    semanticJudge,
   }).recordSource("Source", "The report is still in draft.");
   const result = await guard.runSequence(
     [
@@ -673,8 +888,11 @@ test("persists semantic findings through snapshots", async () => {
   const persisted: LineageGuardSessionSnapshot | null =
     await guard.checkpoint(store);
   assert.equal(persisted?.semanticFindings?.length, 1);
+  assert.equal(persisted?.analysisMode, "hybrid");
 
-  const restored = await LineageGuardSession.resume(store, "judge-session");
+  const restored = await LineageGuardSession.resume(store, "judge-session", {
+    semanticJudge,
+  });
   assert.ok(
     restored
       .getReport()

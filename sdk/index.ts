@@ -161,6 +161,7 @@ export {
 } from "./runtime.ts";
 export { LineageGuardGraphRun } from "./graph.ts";
 export type {
+  AnalysisMode,
   GuardedToolClient,
   GuardedAgent,
   GuardedSequenceResult,

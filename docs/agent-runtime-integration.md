@@ -14,7 +14,7 @@ authoritative source
   model/agent output
         |
         v
-  inspectHandoff() ---- block ----> review + checkpoint retry
+inspectHandoffAsync() -- block ---> review + checkpoint retry
         |
        allow
         v
@@ -28,9 +28,10 @@ authoritative source
  external side effect
 ```
 
-`inspectHandoff` must run before the proposed output becomes another agent's
-input. `executeTool` must wrap the actual implementation rather than audit it
-afterward.
+`inspectHandoffAsync` must run before the proposed output becomes another
+agent's input when a semantic judge is configured. The synchronous
+`inspectHandoff` variant applies deterministic rules only. `executeTool` must
+wrap the actual implementation rather than audit it afterward.
 
 ## Option A: supervise an ordered agent sequence
 
@@ -92,11 +93,16 @@ threshold. Later agents are not invoked.
 
 ## Option B: insert it into an existing serial graph or loop
 
+Choose `analysisMode: "hybrid"` to combine stable English/numeric rules with a
+semantic judge, or `analysisMode: "semantic"` to let the judge make handoff
+decisions without built-in lexical findings. Both modes require
+`inspectHandoffAsync()` and a configured `semanticJudge`.
+
 For a graph framework, keep its scheduler and add two middleware calls:
 
 ```ts
 const proposedOutput = await existingAgent.invoke(currentInput);
-const handoff = guard.inspectHandoff(
+const handoff = await guard.inspectHandoffAsync(
   node.id,
   node.displayName,
   proposedOutput,
@@ -198,6 +204,13 @@ incorrect `sideEffect: false` declaration.
 The verifier receives the session id, run id, tool name, action, SHA-256 input
 fingerprint, token, and reviewer. It should validate expiry, reviewer identity,
 scope, and revocation. Tokens are consumed once after authorization.
+
+The verifier may return a boolean or `Promise<boolean>`. Tool execution awaits
+asynchronous verification and reserves the token while verification is pending,
+so concurrent calls cannot race the same one-time approval. Use
+`authorizeToolAsync()` for an asynchronous preflight that does not execute or
+consume the token; the synchronous `authorizeTool()` method is for synchronous
+verifiers only.
 
 Prefer registered tools and give agents only `GuardedToolClient`. Do not let
 model text choose the side-effect classification, register implementations, or

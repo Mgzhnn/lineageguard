@@ -17,6 +17,8 @@ export async function GET() {
       "blast-radius",
       "recovery-packet",
       "runtime-supervisor",
+      "hybrid-analysis-runtime-mode",
+      "dynamic-semantic-runtime-mode",
       "pre-tool-gate",
       "registered-tool-client",
       "scoped-one-time-approvals",
