@@ -32,6 +32,37 @@ test("finds the first numeric and confidence mutation", () => {
   assert.ok(result.issues.some((issue) => issue.type === "negation"));
 });
 
+test("does not mark an equivalent clinical handoff as the first break", () => {
+  const result = analyzeLineage(
+    [
+      {
+        id: "source",
+        label: "Source",
+        text: "A small pilot study suggests the treatment may reduce symptoms by 12–18%. The result has not been confirmed in a large trial.",
+      },
+      {
+        id: "research",
+        label: "Research agent",
+        text: "A pilot study suggests the treatment may reduce symptoms by 12–18%, but the finding has not been confirmed by a large trial.",
+      },
+      {
+        id: "summary",
+        label: "Summary agent",
+        text: "The study shows the treatment reduces symptoms by 18%.",
+      },
+    ],
+    "Keep the uncertainty and the complete 12–18% range. Do not call the result proven.",
+  );
+
+  assert.equal(result.firstMutationIndex, 1);
+  assert.equal(
+    result.issues.some(
+      (issue) => issue.type === "guardrail" && issue.transitionIndex === 0,
+    ),
+    false,
+  );
+});
+
 test("flags a blocked external action when an agent claims completion", () => {
   const stages = [
     {
@@ -405,6 +436,29 @@ test("never reports an unreadable script as clean", () => {
     english.issues.some((issue) => issue.type === "coverage"),
     false,
   );
+});
+
+test("fails closed when a stage is empty", () => {
+  const result = analyzeLineage([
+    {
+      id: "source",
+      label: "Source",
+      text: "The estimate remains 12% pending verification.",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      text: "   ",
+    },
+  ]);
+
+  const coverageIssue = result.issues.find(
+    (issue) => issue.title === "Stage content is missing",
+  );
+  assert.ok(coverageIssue);
+  assert.equal(coverageIssue.severity, "high");
+  assert.equal(result.firstMutationIndex, 0);
+  assert.equal(result.overallSeverity, "high");
 });
 
 test("rejects duplicate custom rules and malformed findings", () => {

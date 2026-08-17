@@ -2121,6 +2121,24 @@ footer p {
   text-transform: uppercase;
 }
 
+.footer-links {
+  display: flex;
+  gap: 22px;
+  color: #8e9bad;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.footer-links a {
+  transition: color 150ms ease;
+}
+
+.footer-links a:hover {
+  color: white;
+}
+
 @media (max-width: 1080px) {
   .workspace-grid {
     grid-template-columns: 1fr;

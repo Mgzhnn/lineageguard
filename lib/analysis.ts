@@ -577,6 +577,10 @@ function importantGuardrailWords(text: string) {
       .filter(
         (word) =>
           !stopWords.has(word) &&
+          // Numeric claims have their own equivalence-aware detector. Counting
+          // them again as instruction words can make an equivalent range
+          // rewrite look like a dropped guardrail.
+          !/^\d/.test(word) &&
           (hasNonAsciiLetters(word) ? word.length >= 2 : word.length > 2),
       ),
   );
@@ -983,7 +987,24 @@ export function analyzeLineage(
   for (let index = 0; index < usableStages.length - 1; index += 1) {
     const from = usableStages[index];
     const to = usableStages[index + 1];
-    if (!from.text || !to.text) continue;
+    if (!from.text || !to.text) {
+      issues.push(
+        makeIssue(
+          "coverage",
+          "high",
+          index,
+          from,
+          to,
+          "Stage content is missing",
+          !from.text
+            ? "The previous stage is empty, so this handoff has no authoritative claim to compare against."
+            : "The proposed handoff is empty, so LineageGuard cannot verify that evidence, meaning, or authority survived the transition.",
+          [],
+          [],
+        ),
+      );
+      continue;
+    }
     if (includeBuiltInRules) {
       issues.push(...analyzeTransition(from, to, index));
     }

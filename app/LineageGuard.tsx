@@ -1,7 +1,7 @@
 "use client";
 
 import { examples } from "@/lib/examples";
-import { PIPELINE_VERSION } from "@/lib/version";
+import { PRODUCT_VERSION } from "@/lib/version";
 import {
   issueLabels,
   useLineageGuardWorkspace,
@@ -75,7 +75,7 @@ export default function LineageGuard() {
         <div className="eyebrow">
           <span>FORENSICS FOR AGENT HANDOFFS</span>
           <span className="eyebrow-line" />
-          <span>HEURISTIC MVP · V{PIPELINE_VERSION}</span>
+          <span>HEURISTIC MVP · V{PRODUCT_VERSION}</span>
         </div>
         <h1>
           Catch the first
@@ -819,7 +819,9 @@ export default function LineageGuard() {
             <span>typescript</span>
           </div>
           <pre>
-            <code>{`const guard = new LineageGuardSession({
+            <code>{`import { LineageGuardSession } from "lineageguard";
+
+const guard = new LineageGuardSession({
   guardrail: "Do not contact the customer",
   blockAtOrAbove: "medium",
   approvalVerifier: verifyApproval,
@@ -930,6 +932,22 @@ if (result.status === "blocked") {
           </span>
           <span>LineageGuard</span>
         </a>
+        <nav className="footer-links" aria-label="Project links">
+          <a
+            href="https://www.npmjs.com/package/lineageguard"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Install SDK
+          </a>
+          <a
+            href="https://github.com/Mgzhnn/lineageguard"
+            rel="noreferrer"
+            target="_blank"
+          >
+            GitHub
+          </a>
+        </nav>
         <p>Open-source prototype · zero paid APIs in this browser demo · data stays local</p>
       </footer>
     </main>
