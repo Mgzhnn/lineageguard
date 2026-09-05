@@ -1,0 +1,623 @@
+TAP version 13
+# Subtest: AUD-01: inherited object properties never authenticate a tenant
+not ok 1 - AUD-01: inherited object properties never authenticate a tenant
+  ---
+  duration_ms: 30.673583
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:11:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    true !== false
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:18:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (0)
+not ok 2 - AUD-02: typed values cannot collide with user records (0)
+  ---
+  duration_ms: 0.297875
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:32:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected "actual" to be strictly unequal to:
+    
+    'c08db5f686fa766e5eefe038c8ef5b7c4d866fc4f5f189ce2bd3ab17b345e32f'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'c08db5f686fa766e5eefe038c8ef5b7c4d866fc4f5f189ce2bd3ab17b345e32f'
+  actual: 'c08db5f686fa766e5eefe038c8ef5b7c4d866fc4f5f189ce2bd3ab17b345e32f'
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:33:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (1)
+not ok 3 - AUD-02: typed values cannot collide with user records (1)
+  ---
+  duration_ms: 0.234041
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:32:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected "actual" to be strictly unequal to:
+    
+    'f0bb9e425fd70b915b184dc5dd72ccdcbf25198a12c9283de9b7762a0683c0be'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'f0bb9e425fd70b915b184dc5dd72ccdcbf25198a12c9283de9b7762a0683c0be'
+  actual: 'f0bb9e425fd70b915b184dc5dd72ccdcbf25198a12c9283de9b7762a0683c0be'
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:33:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (2)
+not ok 4 - AUD-02: typed values cannot collide with user records (2)
+  ---
+  duration_ms: 7.053375
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:32:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected "actual" to be strictly unequal to:
+    
+    '079fbc0a8f81f63c0c551684fdfefbd8e5d555866bcdb1c854d14444864f6769'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '079fbc0a8f81f63c0c551684fdfefbd8e5d555866bcdb1c854d14444864f6769'
+  actual: '079fbc0a8f81f63c0c551684fdfefbd8e5d555866bcdb1c854d14444864f6769'
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:33:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (3)
+not ok 5 - AUD-02: typed values cannot collide with user records (3)
+  ---
+  duration_ms: 0.117667
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:32:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected "actual" to be strictly unequal to:
+    
+    '40e85bd1f01795712d0c6a33eaa3d0855e81a40d7a71af338263dd77ff19c6fa'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '40e85bd1f01795712d0c6a33eaa3d0855e81a40d7a71af338263dd77ff19c6fa'
+  actual: '40e85bd1f01795712d0c6a33eaa3d0855e81a40d7a71af338263dd77ff19c6fa'
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:33:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (4)
+not ok 6 - AUD-02: typed values cannot collide with user records (4)
+  ---
+  duration_ms: 0.143459
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:32:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected "actual" to be strictly unequal to:
+    
+    'fbdf40cfd1756285007ffc80b3617bc99792fa27bbee275601aaa698538650d0'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'fbdf40cfd1756285007ffc80b3617bc99792fa27bbee275601aaa698538650d0'
+  actual: 'fbdf40cfd1756285007ffc80b3617bc99792fa27bbee275601aaa698538650d0'
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:33:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-02: sparse arrays cannot impersonate arrays of null
+not ok 7 - AUD-02: sparse arrays cannot impersonate arrays of null
+  ---
+  duration_ms: 0.734542
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:37:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected "actual" to be strictly unequal to:
+    
+    '1d8fc6ceb1f94c6326d6d5483d258fcb2e179e9869325b245d105c2219bf69fd'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '1d8fc6ceb1f94c6326d6d5483d258fcb2e179e9869325b245d105c2219bf69fd'
+  actual: '1d8fc6ceb1f94c6326d6d5483d258fcb2e179e9869325b245d105c2219bf69fd'
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:38:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-03: execution uses the input actually approved across an await
+not ok 8 - AUD-03: execution uses the input actually approved across an await
+  ---
+  duration_ms: 21.217167
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:47:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    5000 !== 5
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 5
+  actual: 5000
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:56:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-04: a freeze while approval is pending prevents execution
+not ok 9 - AUD-04: a freeze while approval is pending prevents execution
+  ---
+  duration_ms: 3.307959
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:59:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected rejection.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'rejects'
+  stack: |-
+    async TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:68:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-04: synchronous authorization cannot execute after a same-tick freeze
+not ok 10 - AUD-04: synchronous authorization cannot execute after a same-tick freeze
+  ---
+  duration_ms: 1.461458
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:72:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected rejection.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'rejects'
+  stack: |-
+    async TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:77:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-05: concurrent semantic handoffs cannot attach findings to another edge
+not ok 11 - AUD-05: concurrent semantic handoffs cannot attach findings to another edge
+  ---
+  duration_ms: 1.498125
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:81:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected rejection.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'rejects'
+  stack: |-
+    async TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:90:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-06: snapshots cannot lose a pending one-time approval reservation
+not ok 12 - AUD-06: snapshots cannot lose a pending one-time approval reservation
+  ---
+  duration_ms: 0.393208
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:94:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    checkpoint must wait until pending operations settle
+    
+    false !== true
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:104:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-07: callers cannot edit an internal recovery checkpoint through getReport
+not ok 13 - AUD-07: callers cannot edit an internal recovery checkpoint through getReport
+  ---
+  duration_ms: 0.725583
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:107:1'
+  failureType: 'testCodeFailure'
+  error: 'The current run has no blocking transition.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    LineageGuardSession.resetToLastVerified (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/sdk/runtime.ts:1397:13)
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:112:22)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The change is -5%.
+not ok 14 - AUD-08: numeric mutation is detected: The change is -5%.
+  ---
+  duration_ms: 3.569125
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:124:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+    
+      assert.ok(pair(before, after).issues.some((issue) => issue.type === "number"))
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:125:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The change is −5%.
+not ok 15 - AUD-08: numeric mutation is detected: The change is −5%.
+  ---
+  duration_ms: 2.182667
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:124:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+    
+      assert.ok(pair(before, after).issues.some((issue) => issue.type === "number"))
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:125:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The value is 1.2345678901234.
+not ok 16 - AUD-08: numeric mutation is detected: The value is 1.2345678901234.
+  ---
+  duration_ms: 0.19875
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:124:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+    
+      assert.ok(pair(before, after).issues.some((issue) => issue.type === "number"))
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:125:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The budget is ５０００.
+not ok 17 - AUD-08: numeric mutation is detected: The budget is ５０００.
+  ---
+  duration_ms: 0.191583
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:124:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+    
+      assert.ok(pair(before, after).issues.some((issue) => issue.type === "number"))
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:125:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-08: equivalent metric ranges compare equal
+not ok 18 - AUD-08: equivalent metric ranges compare equal
+  ---
+  duration_ms: 0.571667
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:128:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      [
+    +   '500-1g'
+    -   '0.5-1g'
+      ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: '0.5-1g'
+  actual:
+    0: '500-1g'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:129:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-08: percent and percentage points remain distinct
+ok 19 - AUD-08: percent and percentage points remain distinct
+  ---
+  duration_ms: 0.273041
+  type: 'test'
+  ...
+# Subtest: AUD-09: every broken branch and descendant is contaminated
+not ok 20 - AUD-09: every broken branch and descendant is contaminated
+  ---
+  duration_ms: 1.008041
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:142:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + Set(1) {
+    - Set(3) {
+        'a',
+    -   'b',
+    -   'b-child'
+      }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:144:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-10: graph results are invariant under node permutation
+not ok 21 - AUD-10: graph results are invariant under node permutation
+  ---
+  duration_ms: 1.201042
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:147:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'root->a'
+    - 'root->b'
+             ^
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'root->b'
+  actual: 'root->a'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:150:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-11: an edgeless graph is rejected
+not ok 22 - AUD-11: an edgeless graph is rejected
+  ---
+  duration_ms: 0.197167
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:153:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception (TracePayloadError).'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:154:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-11: prototype-like parent ids do not become inherited claim projections
+not ok 23 - AUD-11: prototype-like parent ids do not become inherited claim projections
+  ---
+  duration_ms: 0.078083
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:156:1'
+  failureType: 'testCodeFailure'
+  error: 'stage.text.trim is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/lib/analysis.ts:983:22
+    Array.map (<anonymous>)
+    analyzeLineage (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/lib/analysis.ts:981:31)
+    runReliabilityGraphPipeline (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/lib/graph.ts:337:28)
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:157:18)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+  ...
+# Subtest: AUD-11: malformed Unicode ids are rejected by the importer
+not ok 24 - AUD-11: malformed Unicode ids are rejected by the importer
+  ---
+  duration_ms: 0.161958
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:163:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception (TracePayloadError).'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:164:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-12: cyclic AnyValue returns a validation error
+not ok 25 - AUD-12: cyclic AnyValue returns a validation error
+  ---
+  duration_ms: 1.351375
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:173:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The error is expected to be an instance of "TracePayloadError". Received "RangeError"
+    
+    Error message:
+    
+    Maximum call stack size exceeded
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:176:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-12: OTLP parser itself rejects invalid graph topology
+not ok 26 - AUD-12: OTLP parser itself rejects invalid graph topology
+  ---
+  duration_ms: 0.271625
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:178:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception (TracePayloadError).'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:179:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: AUD-12: duplicate nested attribute keys are rejected
+not ok 27 - AUD-12: duplicate nested attribute keys are rejected
+  ---
+  duration_ms: 0.177458
+  type: 'test'
+  location: '/Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:181:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception (TracePayloadError).'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/magzanziabek/Documents/ChatGPT/extra/lineageguard-review-2026-09-05/repo/tests/audit-regressions.test.ts:182:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 1
+# fail 26
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 229.654667
