@@ -670,6 +670,10 @@ export class LineageGuardSession {
   private frozen = false;
   private latestReport: ReliabilityPipelineRun | null = null;
   private eventSequence = 0;
+  private revision = 0;
+  private handoffInProgress = false;
+  private agentInProgress = false;
+  private activeToolExecutions = 0;
 
   constructor(options: LineageGuardSessionOptions = {}) {
     this.sessionId = options.sessionId?.trim() || createSessionId();
@@ -742,6 +746,7 @@ export class LineageGuardSession {
     }
     this.stages.push(this.makeStage(id, label, text));
     this.latestReport = this.runPipeline(this.stages, null);
+    this.revision += 1;
     this.emit(
       "source-recorded",
       `Authoritative source recorded as ${label.trim()}.`,
@@ -757,6 +762,7 @@ export class LineageGuardSession {
     output: string,
     options: HandoffOptions = {},
   ) {
+    this.assertNoConcurrentHandoff();
     if (this.analysisMode !== "deterministic") {
       throw new Error(
         `${this.analysisMode} analysis mode requires inspectHandoffAsync() so the semantic judge cannot be skipped.`,
@@ -789,7 +795,7 @@ export class LineageGuardSession {
             "The handoff idempotency key was reused with different input.",
           );
         }
-        return existing.decision;
+        return structuredClone(existing.decision);
       }
     }
 
@@ -813,6 +819,7 @@ export class LineageGuardSession {
 
     this.stages = candidateStages;
     this.latestReport = report;
+    this.revision += 1;
 
     const decision: HandoffDecision = shouldBlock
       ? {
@@ -848,7 +855,7 @@ export class LineageGuardSession {
       candidate.id,
       report.id,
     );
-    return decision;
+    return structuredClone(decision);
   }
 
   /**
@@ -857,6 +864,16 @@ export class LineageGuardSession {
    * semantic judge is configured.
    */
   async inspectHandoffAsync(
+    agentId: string,
+    agentName: string,
+    output: string,
+    options: HandoffOptions = {},
+  ): Promise<HandoffDecision> {
+    this.assertNoConcurrentHandoff();
+    return this.inspectHandoffSerial(agentId, agentName, output, options);
+  }
+
+  private async inspectHandoffSerial(
     agentId: string,
     agentName: string,
     output: string,
@@ -880,32 +897,47 @@ export class LineageGuardSession {
             "The handoff idempotency key was reused with different input.",
           );
         }
-        return existing.decision;
+        return structuredClone(existing.decision);
       }
     }
 
     this.assertRunnable();
-    if (this.analysisMode !== "deterministic") {
-      await this.applySemanticJudge(agentId, agentName, output);
+    const transitionIndex = this.stages.length - 1;
+    const previousFindings = this.semanticFindings.get(transitionIndex);
+    this.handoffInProgress = true;
+    try {
+      if (this.analysisMode !== "deterministic") {
+        await this.applySemanticJudge(agentId, agentName, output);
+      }
+      return this.commitHandoff(agentId, agentName, output, options);
+    } catch (error) {
+      if (this.stages.length - 1 === transitionIndex) {
+        if (previousFindings) this.semanticFindings.set(transitionIndex, previousFindings);
+        else this.semanticFindings.delete(transitionIndex);
+      }
+      throw error;
+    } finally {
+      this.handoffInProgress = false;
     }
-    return this.commitHandoff(agentId, agentName, output, options);
   }
 
   async runAgent<TContext>(
     agent: GuardedAgent<TContext>,
     context: TContext,
   ): Promise<HandoffDecision> {
+    this.assertNoConcurrentHandoff();
     this.assertRunnable();
+    this.agentInProgress = true;
     const input = this.lastStage().text;
-    this.emit("agent-started", `${agent.name} started.`, agent.id);
     try {
+      this.emit("agent-started", `${agent.name} started.`, agent.id);
       const output = await agent.execute({
         input,
         context,
         guard: this.exposeSessionToAgents ? this : undefined,
         tools: this.getToolClient(),
       });
-      return this.inspectHandoffAsync(agent.id, agent.name, output);
+      return await this.inspectHandoffSerial(agent.id, agent.name, output);
     } catch (error) {
       this.emit(
         "agent-failed",
@@ -913,6 +945,8 @@ export class LineageGuardSession {
         agent.id,
       );
       throw error;
+    } finally {
+      this.agentInProgress = false;
     }
   }
 
@@ -1075,6 +1109,9 @@ export class LineageGuardSession {
     inputFingerprint: string;
     requiresApproval: boolean;
   } {
+    if (typeof intent.sideEffect !== "boolean") {
+      throw new Error("Tool intent requires an explicit sideEffect boolean.");
+    }
     const toolName = cleanText(intent.toolName, "Tool name");
     const action = cleanText(intent.action, "Tool action");
     const inputFingerprint = fingerprintValue(intent.input);
@@ -1162,7 +1199,8 @@ export class LineageGuardSession {
 
     if (requiresApproval) {
       const approval = normalizedIntent.approval;
-      if (!approval?.token.trim() || !approval.approvedBy.trim()) {
+      if (typeof approval?.token !== "string" || !approval.token.trim() ||
+          typeof approval.approvedBy !== "string" || !approval.approvedBy.trim()) {
         return {
           decision: this.toolDecision(
             "approval-required",
@@ -1229,7 +1267,7 @@ export class LineageGuardSession {
       toolName: intent.toolName,
       action: intent.action,
       inputFingerprint,
-      approval: intent.approval!,
+      approval: Object.freeze({ ...intent.approval! }),
     };
   }
 
@@ -1259,6 +1297,7 @@ export class LineageGuardSession {
     intent: ToolIntent<TInput>,
     consumeApproval: boolean,
   ): Promise<ToolDecision<TInput>> {
+    const revision = this.revision;
     const prepared = this.prepareToolAuthorization(intent);
     if (prepared.decision) return prepared.decision;
     if (!prepared.requiresApproval) {
@@ -1296,6 +1335,10 @@ export class LineageGuardSession {
           true,
         );
       }
+      if (this.frozen || this.revision !== revision) {
+        return this.toolDecision("blocked", "The run changed or was frozen while approval was pending.",
+          prepared.intent, prepared.inputFingerprint, true);
+      }
       if (consumeApproval) {
         this.consumedApprovalTokenFingerprints.add(tokenFingerprint);
       }
@@ -1309,12 +1352,22 @@ export class LineageGuardSession {
     intent: ToolIntent<TInput>,
     execute: (input: TInput) => TResult | Promise<TResult>,
   ): Promise<TResult> {
+    // Validate before cloning: structuredClone alone invokes getters and drops
+    // unsupported object properties. Fingerprinting rejects those shapes.
+    const inputFingerprint = fingerprintValue(intent.input);
+    const capturedInput = structuredClone(intent.input);
+    if (fingerprintValue(capturedInput) !== inputFingerprint) {
+      throw new Error("Tool input cannot be copied without changing its fingerprint.");
+    }
+    intent = { ...intent, input: capturedInput,
+      approval: intent.approval ? { ...intent.approval } : undefined };
+    const revision = this.revision;
     const idempotencyKey = cleanOptionalText(
       intent.idempotencyKey,
       "Tool idempotency key",
     );
     const operationFingerprint = fingerprintValue({
-      toolName: intent.toolName.trim().toLowerCase(),
+      toolName: intent.toolName.trim(),
       action: intent.action.trim(),
       input: intent.input,
     });
@@ -1344,14 +1397,21 @@ export class LineageGuardSession {
     }
 
     let authorizationSucceeded = false;
-    const executionPromise = (async () => {
+    this.activeToolExecutions += 1;
+    // Reserve the idempotency record before invoking host callbacks, which may
+    // synchronously reenter this session.
+    const executionPromise = Promise.resolve().then(async () => {
       const decision = await this.authorizeToolWithAsyncVerifier(intent, true);
       if (decision.status !== "allowed") {
         throw new LineageGuardBlockedError(decision);
       }
+      if (this.frozen || this.revision !== revision) {
+        throw new LineageGuardBlockedError({ ...decision, status: "blocked",
+          reason: "The run changed or was frozen before tool execution." });
+      }
       authorizationSucceeded = true;
       return execute(decision.intent.input as TInput);
-    })();
+    });
     const record: ToolExecutionRecord | undefined = idempotencyKey
       ? {
           idempotencyKey,
@@ -1385,10 +1445,13 @@ export class LineageGuardSession {
         }
       }
       throw error;
+    } finally {
+      this.activeToolExecutions -= 1;
     }
   }
 
   resetToLastVerified() {
+    this.assertNoConcurrentHandoff();
     if (!this.latestReport || !this.frozen) {
       throw new Error("There is no blocked handoff to recover.");
     }
@@ -1409,6 +1472,7 @@ export class LineageGuardSession {
     }
     this.frozen = false;
     this.latestReport = this.runPipeline(this.stages, null);
+    this.revision += 1;
     const checkpoint = this.lastStage();
     this.emit(
       "recovery-applied",
@@ -1420,6 +1484,9 @@ export class LineageGuardSession {
   }
 
   toSnapshot(): LineageGuardSessionSnapshot {
+    if (this.agentInProgress || this.handoffInProgress || this.activeToolExecutions || this.pendingApprovalTokenFingerprints.size) {
+      throw new Error("Cannot snapshot while an operation is in progress; await completion first.");
+    }
     const recoveryTransitionIndex = this.frozen
       ? this.getReport().recovery.restartStageIndex === null
         ? null
@@ -1452,9 +1519,7 @@ export class LineageGuardSession {
           status,
         }),
       ),
-      handoffRequests: [...this.handoffRequests.values()].map((request) => ({
-        ...request,
-      })),
+      handoffRequests: structuredClone([...this.handoffRequests.values()]),
       eventSequence: this.eventSequence,
       ...(this.semanticFindings.size
         ? {
@@ -1523,7 +1588,7 @@ export class LineageGuardSession {
       session.toolExecutions.set(record.idempotencyKey, { ...record }),
     );
     snapshot.handoffRequests.forEach((record) =>
-      session.handoffRequests.set(record.idempotencyKey, { ...record }),
+      session.handoffRequests.set(record.idempotencyKey, structuredClone(record)),
     );
     session.eventSequence = snapshot.eventSequence;
     return session;
@@ -1545,7 +1610,7 @@ export class LineageGuardSession {
     if (!this.latestReport) {
       throw new Error("Record a source before requesting a report.");
     }
-    return this.latestReport;
+    return structuredClone(this.latestReport);
   }
 
   getRecoveryPacket(): RecoveryPacket {
@@ -1677,6 +1742,12 @@ export class LineageGuardSession {
       throw new Error(
         "This run is frozen. Call resetToLastVerified() before retrying.",
       );
+    }
+  }
+
+  private assertNoConcurrentHandoff() {
+    if (this.agentInProgress || this.handoffInProgress) {
+      throw new Error("A handoff or agent operation is already in progress; sessions are serial.");
     }
   }
 

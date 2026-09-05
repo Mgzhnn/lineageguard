@@ -32,9 +32,9 @@ export default function LineageGuard() {
     confirmedCount,
     dismissedCount,
     firstTransitionLabel,
-    setGuardrail,
-    setIsFresh,
-    setSelectedExample,
+    analyzedStages,
+    actionMessage,
+    updateGuardrail,
     setReplayIndex,
     setIsPlaying,
     setReviews,
@@ -193,9 +193,7 @@ export default function LineageGuard() {
               <textarea
                 id="guardrail"
                 onChange={(event) => {
-                  setGuardrail(event.target.value);
-                  setIsFresh(false);
-                  setSelectedExample("");
+                  updateGuardrail(event.target.value);
                 }}
                 rows={3}
                 value={guardrail}
@@ -357,7 +355,7 @@ export default function LineageGuard() {
                 <button
                   aria-pressed={isPlaying}
                   onClick={() => {
-                    if (replayIndex >= stages.length - 1) setReplayIndex(0);
+                    if (replayIndex >= analyzedStages.length - 1) setReplayIndex(0);
                     setIsPlaying((current) => !current);
                   }}
                   type="button"
@@ -367,8 +365,8 @@ export default function LineageGuard() {
                 </button>
               </div>
 
-              <div className="replay-rail" role="tablist" aria-label="Replay stage">
-                {stages.map((stage, index) => {
+              <div className="replay-rail" role="group" aria-label="Replay stage">
+                {analyzedStages.map((stage, index) => {
                   const isBroken =
                     result.firstMutationIndex !== null &&
                     index === result.firstMutationIndex + 1;
@@ -377,8 +375,8 @@ export default function LineageGuard() {
                     index > result.firstMutationIndex + 1;
                   return (
                     <button
-                      aria-label={`Show ${stage.label}`}
-                      aria-selected={replayIndex === index}
+                      aria-label={`Show ${stage.label}${isBroken ? ": first break" : isPastBreak ? ": downstream of first break" : ""}`}
+                      aria-pressed={replayIndex === index}
                       className={`${replayIndex === index ? "active" : ""} ${
                         isBroken ? "break" : ""
                       } ${isPastBreak ? "after-break" : ""}`}
@@ -387,7 +385,6 @@ export default function LineageGuard() {
                         setReplayIndex(index);
                         setIsPlaying(false);
                       }}
-                      role="tab"
                       type="button"
                     >
                       <span>{String(index + 1).padStart(2, "0")}</span>
@@ -406,7 +403,7 @@ export default function LineageGuard() {
                 <div className="frame-topline">
                   <span>
                     FRAME {String(replayIndex + 1).padStart(2, "0")} /{" "}
-                    {String(stages.length).padStart(2, "0")}
+                    {String(analyzedStages.length).padStart(2, "0")}
                   </span>
                   <span>
                     {replayIndex === 0
@@ -419,7 +416,7 @@ export default function LineageGuard() {
                   </span>
                 </div>
                 <blockquote>
-                  “{stages[replayIndex]?.text || "No text in this handoff."}”
+                  “{analyzedStages[replayIndex]?.text || "No text in this handoff."}”
                 </blockquote>
                 <div className="signal-rack">
                   <div
@@ -496,8 +493,8 @@ export default function LineageGuard() {
                         ? "Every later frame is compared with the handoff before it."
                         : replayIssues.length
                           ? replayIssues.map((issue) => issue.title).join(" · ")
-                          : `${stages[replayIndex - 1]?.label} → ${
-                              stages[replayIndex]?.label
+                          : `${analyzedStages[replayIndex - 1]?.label} → ${
+                              analyzedStages[replayIndex]?.label
                             } stayed structurally stable.`}
                     </small>
                   </div>
@@ -511,7 +508,7 @@ export default function LineageGuard() {
                 <span>FIRST BREAK MARKED</span>
               </div>
               <div className="timeline">
-                {stages.map((stage, index) => {
+                {analyzedStages.map((stage, index) => {
                   const isFirstBroken =
                     result.firstMutationIndex !== null &&
                     index === result.firstMutationIndex + 1;
@@ -725,7 +722,7 @@ export default function LineageGuard() {
                       : "Smallest safe rollback prepared"}
                   </h3>
                 </div>
-                <button onClick={copyRecoveryPacket} type="button">
+                <button disabled={!isFresh} onClick={copyRecoveryPacket} type="button">
                   {recoveryCopyState === "copied"
                     ? "Packet copied"
                     : "Copy recovery packet"}
@@ -769,14 +766,15 @@ export default function LineageGuard() {
               )}
             </section>
 
+            {actionMessage && <p role="status">{actionMessage}</p>}
             <div className="report-actions">
-              <button onClick={copyReport} type="button">
+              <button disabled={!isFresh} onClick={copyReport} type="button">
                 {copyState === "copied" ? "Copied" : "Copy report"}
               </button>
-              <button onClick={copySharePost} type="button">
+              <button disabled={!isFresh} onClick={copySharePost} type="button">
                 {shareState === "copied" ? "Post copied" : "Copy share post"}
               </button>
-              <button onClick={exportJson} type="button">
+              <button disabled={!isFresh} onClick={exportJson} type="button">
                 Export JSON
               </button>
             </div>

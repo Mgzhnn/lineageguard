@@ -115,6 +115,9 @@ function normalizeForJson(
   value: unknown,
   ancestors: Set<object>,
 ): unknown {
+  if (ancestors.size > 100) {
+    throw new TypeError("Cannot fingerprint a value nested more than 100 levels.");
+  }
   if (
     value === null ||
     typeof value === "string" ||
@@ -134,12 +137,27 @@ function normalizeForJson(
   if (typeof value === "function" || typeof value === "symbol") {
     throw new TypeError(`Cannot fingerprint a ${typeof value} value.`);
   }
-  if (value instanceof Date) return { $date: value.toISOString() };
+  if (value instanceof Date) {
+    if (Object.getPrototypeOf(value) !== Date.prototype || Reflect.ownKeys(value).length) {
+      throw new TypeError("Cannot fingerprint Date subclasses or custom properties.");
+    }
+    return { $date: Date.prototype.toISOString.call(value) };
+  }
   if (value instanceof Uint8Array) {
+    if (typeof SharedArrayBuffer !== "undefined" && value.buffer instanceof SharedArrayBuffer) {
+      throw new TypeError("Cannot fingerprint shared bytes; copy to a private Uint8Array first.");
+    }
+    if (Object.getPrototypeOf(value) !== Uint8Array.prototype ||
+        Reflect.ownKeys(value).some((key) => typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) {
+      throw new TypeError("Cannot fingerprint byte-array subclasses or custom properties; use a plain Uint8Array.");
+    }
     return { $bytes: [...value] };
   }
   if (typeof value !== "object") return value;
   const prototype = Object.getPrototypeOf(value);
+  if (Array.isArray(value) && prototype !== Array.prototype) {
+    throw new TypeError("Cannot fingerprint array subclasses.");
+  }
   if (
     !Array.isArray(value) &&
     prototype !== Object.prototype &&
@@ -158,7 +176,21 @@ function normalizeForJson(
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((item) => normalizeForJson(item, ancestors));
+      for (const key of Reflect.ownKeys(value)) {
+        if (key === "length") continue;
+        if (typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length) {
+          throw new TypeError("Cannot fingerprint custom array properties.");
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+          throw new TypeError("Cannot fingerprint accessor or non-enumerable array elements.");
+        }
+      }
+      return Array.from({ length: value.length }, (_, index) =>
+        Object.hasOwn(value, index)
+          ? normalizeForJson(value[index], ancestors)
+          : { $hole: true },
+      );
     }
     const record = value as Record<string, unknown>;
     const entries = Reflect.ownKeys(record).map((key) => {
@@ -166,14 +198,18 @@ function normalizeForJson(
         throw new TypeError("Cannot fingerprint symbol-keyed properties.");
       }
       const descriptor = Object.getOwnPropertyDescriptor(record, key);
-      if (!descriptor || !("value" in descriptor)) {
-        throw new TypeError("Cannot fingerprint accessor properties.");
+      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+        throw new TypeError("Cannot fingerprint accessor or non-enumerable properties.");
       }
       return [key, normalizeForJson(descriptor.value, ancestors)] as const;
     });
-    return Object.fromEntries(
-      entries.sort(([left], [right]) => left.localeCompare(right)),
-    );
+    entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+    // Escape user objects that could impersonate a special-value tag. The
+    // escape tag must itself be reserved to keep tag-shaped records distinct.
+    const reserved = new Set(["$number", "$undefined", "$bigint", "$date", "$bytes", "$hole", "$object"]);
+    return entries.some(([key]) => reserved.has(key))
+      ? { $object: entries }
+      : Object.fromEntries(entries);
   } finally {
     ancestors.delete(value);
   }

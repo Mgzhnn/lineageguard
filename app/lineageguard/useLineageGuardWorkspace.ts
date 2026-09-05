@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
 } from "react";
@@ -20,6 +21,7 @@ import {
   TRACE_LIMITS,
 } from "@/lib/trace-schema";
 import { PIPELINE_VERSION } from "@/lib/version";
+import { requireCurrentReport } from "./report-state";
 
 export const issueLabels: Record<IssueType, string> = {
   number: "NUMBER DRIFT",
@@ -60,6 +62,9 @@ export function useLineageGuardWorkspace() {
     runReliabilityPipeline(initialExample.stages, initialExample.guardrail),
   );
   const result = pipelineRun.analysis;
+  const analyzedStages = pipelineRun.graph.nodes;
+  const importRevision = useRef(0);
+  const [actionMessage, setActionMessage] = useState("");
   const [isFresh, setIsFresh] = useState(true);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [shareState, setShareState] = useState<"idle" | "copied">("idle");
@@ -78,13 +83,13 @@ export function useLineageGuardWorkspace() {
   const firstMutation = useMemo(() => {
     if (result.firstMutationIndex === null) return null;
     return {
-      from: stages[result.firstMutationIndex]?.label ?? "Previous step",
-      to: stages[result.firstMutationIndex + 1]?.label ?? "Next step",
+      from: analyzedStages[result.firstMutationIndex]?.label ?? "Previous step",
+      to: analyzedStages[result.firstMutationIndex + 1]?.label ?? "Next step",
     };
-  }, [result.firstMutationIndex, stages]);
+  }, [result.firstMutationIndex, analyzedStages]);
   const signalSnapshots = useMemo(
-    () => stages.map((stage) => getTraceSignalSnapshot(stage.text)),
-    [stages],
+    () => analyzedStages.map((stage) => getTraceSignalSnapshot(stage.text)),
+    [analyzedStages],
   );
   const replaySnapshot =
     signalSnapshots[replayIndex] ?? getTraceSignalSnapshot("");
@@ -108,7 +113,7 @@ export function useLineageGuardWorkspace() {
     if (!isPlaying) return;
     const timer = window.setInterval(() => {
       setReplayIndex((current) => {
-        if (current >= stages.length - 1) {
+        if (current >= analyzedStages.length - 1) {
           setIsPlaying(false);
           return current;
         }
@@ -116,7 +121,45 @@ export function useLineageGuardWorkspace() {
       });
     }, 1_100);
     return () => window.clearInterval(timer);
-  }, [isPlaying, stages.length]);
+  }, [isPlaying, analyzedStages.length]);
+
+  useEffect(() => () => { importRevision.current += 1; }, []);
+
+  function markEdited() {
+    importRevision.current += 1;
+    setIsFresh(false);
+    setIsPlaying(false);
+    setPipelineRunning(false);
+    setSelectedExample("");
+    setReviews({});
+    setActionMessage("");
+  }
+
+  function updateGuardrail(value: string) {
+    markEdited();
+    setGuardrail(value);
+  }
+
+  function reportIsCurrent() {
+    try {
+      requireCurrentReport(pipelineRun, stages, guardrail);
+      setActionMessage("");
+      return true;
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Run the pipeline again.");
+      return false;
+    }
+  }
+
+  async function writeClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      setActionMessage("Clipboard access failed. Allow clipboard access or export the JSON report.");
+      return false;
+    }
+  }
 
   useEffect(() => {
     if (!pipelineRunning) return;
@@ -133,6 +176,8 @@ export function useLineageGuardWorkspace() {
   }, [pipelineRun.modules.length, pipelineRunning]);
 
   function loadExample(exampleId: string) {
+    importRevision.current += 1;
+    setActionMessage("");
     const example = examples.find((item) => item.id === exampleId) ?? examples[0];
     const nextStages = cloneStages(example.stages);
     setSelectedExample(example.id);
@@ -153,6 +198,7 @@ export function useLineageGuardWorkspace() {
   }
 
   function updateStage(index: number, field: "label" | "text", value: string) {
+    markEdited();
     setStages((current) =>
       current.map((stage, stageIndex) =>
         stageIndex === index ? { ...stage, [field]: value } : stage,
@@ -165,6 +211,7 @@ export function useLineageGuardWorkspace() {
 
   function addStage() {
     if (stages.length >= 7) return;
+    markEdited();
     setStages((current) => [
       ...current,
       {
@@ -180,6 +227,7 @@ export function useLineageGuardWorkspace() {
 
   function removeStage(index: number) {
     if (index === 0 || stages.length <= 2) return;
+    markEdited();
     setStages((current) =>
       current.filter((_, stageIndex) => stageIndex !== index),
     );
@@ -189,6 +237,8 @@ export function useLineageGuardWorkspace() {
   }
 
   function runAnalysis() {
+    importRevision.current += 1;
+    setActionMessage("");
     const nextPipeline = runReliabilityPipeline(stages, guardrail);
     const nextResult = nextPipeline.analysis;
     setPipelineRun(nextPipeline);
@@ -208,12 +258,15 @@ export function useLineageGuardWorkspace() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    const revision = ++importRevision.current;
     if (file.size > TRACE_LIMITS.payloadBytes) {
       setImportMessage("Import failed: JSON file must be smaller than 2 MB.");
       return;
     }
     try {
-      const parsed = parseTracePayload(JSON.parse(await file.text()));
+      const text = await file.text();
+      if (revision !== importRevision.current) return;
+      const parsed = parseTracePayload(JSON.parse(text));
       const nextStages = cloneStages(parsed.stages);
       const nextPipeline = runReliabilityPipeline(
         nextStages,
@@ -233,6 +286,7 @@ export function useLineageGuardWorkspace() {
       );
       setIsFresh(true);
     } catch (error) {
+      if (revision !== importRevision.current) return;
       setImportMessage(
         `Import failed: ${
           error instanceof Error ? error.message : "invalid trace file"
@@ -249,18 +303,20 @@ export function useLineageGuardWorkspace() {
   }
 
   async function copyReport() {
+    if (!reportIsCurrent()) return;
     const reviewSummary =
       reviewedCount > 0
         ? `\nHuman review: ${confirmedCount} confirmed, ${dismissedCount} dismissed`
         : "\nHuman review: pending";
-    await navigator.clipboard.writeText(
+    if (!await writeClipboard(
       `${buildPlainTextReport(result, stages)}${reviewSummary}`,
-    );
+    )) return;
     setCopyState("copied");
     window.setTimeout(() => setCopyState("idle"), 1_600);
   }
 
   async function copySharePost() {
+    if (!reportIsCurrent()) return;
     const issueNames = [
       ...new Set(
         result.issues.map((issue) => issueLabels[issue.type]),
@@ -272,12 +328,13 @@ export function useLineageGuardWorkspace() {
       result.firstMutationIndex === null
         ? `I replayed a ${stages.length}-stage AI chain through LineageGuard. No structured mutation was detected. Everything ran locally. ${reportId} #LineageGuard #AIAgents`
         : `I put a ${stages.length}-stage AI chain through a black-box replay. The first mutation appeared at ${firstTransitionLabel}: ${issueNames}. Blast radius: ${result.contaminatedOutputs} output${result.contaminatedOutputs === 1 ? "" : "s"}. ${reportId} #LineageGuard #AISafety`;
-    await navigator.clipboard.writeText(text);
+    if (!await writeClipboard(text)) return;
     setShareState("copied");
     window.setTimeout(() => setShareState("idle"), 1_600);
   }
 
   async function copyRecoveryPacket() {
+    if (!reportIsCurrent()) return;
     const recovery = pipelineRun.recovery;
     const text =
       recovery.status === "not-required"
@@ -295,12 +352,13 @@ export function useLineageGuardWorkspace() {
                 }`,
             ),
           ].join("\n");
-    await navigator.clipboard.writeText(text);
+    if (!await writeClipboard(text)) return;
     setRecoveryCopyState("copied");
     window.setTimeout(() => setRecoveryCopyState("idle"), 1_600);
   }
 
   function exportJson() {
+    if (!reportIsCurrent()) return;
     downloadJson("lineageguard-report.json", {
       exportedAt: new Date().toISOString(),
       engine: `LineageGuard reliability pipeline v${PIPELINE_VERSION}`,
@@ -314,6 +372,9 @@ export function useLineageGuardWorkspace() {
   }
 
   return {
+    analyzedStages,
+    actionMessage,
+    updateGuardrail,
     selectedExample,
     stages,
     guardrail,

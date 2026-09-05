@@ -73,6 +73,13 @@ try {
       assert.equal(typeof parseOtlpTracePayload, "function");
       assert.equal(typeof analyzeLineage, "function");
       assert.equal(typeof runReliabilityPipeline, "function");
+
+      const guard = new LineageGuardSession().recordSource("Source", "Change: -5%.");
+      assert.equal(guard.inspectHandoff("writer", "Writer", "Change: 5%.").status, "blocked");
+      const toolGuard = new LineageGuardSession().recordSource("Source", "Read bytes.");
+      const value = await toolGuard.executeTool({ toolName: "read", action: "Read", sideEffect: false,
+        input: new Uint8Array([42]) }, (bytes) => bytes[0]);
+      assert.equal(value, 42);
     `,
   );
   const smoke = spawnSync(process.execPath, [smokePath], {

@@ -805,7 +805,8 @@ test("applies the semantic judge in an existing framework loop", async () => {
   );
 
   assert.equal(decision.status, "blocked");
-  assert.equal(duplicate, decision);
+  assert.deepEqual(duplicate, decision);
+  assert.notEqual(duplicate, decision, "cached decisions are defensive copies");
   assert.equal(judgeCalls, 1);
 });
 

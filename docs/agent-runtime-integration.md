@@ -126,6 +126,10 @@ graphState.currentNode = failedNode;
 
 This retries only the failed node; previously verified work is preserved.
 
+Authenticate the reviewer in the host before resetting or releasing downstream
+work. `resetToLastVerified()` is an explicit host action, not an approval verifier.
+It returns the restored input and clears the local frozen state.
+
 For a true branch/merge DAG, use `LineageGuardGraphRun` or submit the v1.1 graph
 contract. Every node declares `parentIds`; merge nodes should provide
 `inheritedClaims[parentId]` so each edge compares the relevant claim projection
@@ -160,6 +164,12 @@ prior tool results. Those are reattached by the host. If the session used custom
 lineage rules, restore requires the same rule IDs so a resumed run cannot
 silently change policy. A restored idempotency record without a cached result
 fails closed instead of repeating a side effect.
+
+Await active agent/handoff calls, tool executions, and approval preflights before
+checkpointing. Pending operations make snapshot creation fail explicitly; the
+snapshot cannot safely represent unfinished callbacks or in-flight reservations.
+Do not run agent/handoff calls concurrently on one session. Agents may still call
+registered tools during their own execution.
 
 ## Protect tools before execution
 

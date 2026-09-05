@@ -33,6 +33,67 @@ export class TracePayloadError extends Error {
   }
 }
 
+export function encodeStageId(id: string) {
+  if (typeof id !== "string" || /[\uD800-\uDFFF]/u.test(id)) {
+    throw new TracePayloadError("Stage ids must contain well-formed Unicode.");
+  }
+  return encodeURIComponent(id);
+}
+
+/** Bound in-process JSON inputs before any recursive adapter or large mapping. */
+export function validateJsonPayload(input: unknown) {
+  const ancestors = new Set<object>();
+  let values = 0;
+  let textCharacters = 0;
+  function visit(value: unknown, depth: number) {
+    if (++values > 100_000 || depth > 64) {
+      throw new TracePayloadError("Trace JSON exceeds the 64-level nesting or 100000-value limit.");
+    }
+    if (typeof value === "string") {
+      textCharacters += value.length;
+      if (textCharacters > TRACE_LIMITS.payloadBytes) throw new TracePayloadError("Trace JSON exceeds the 2 MB payload limit.");
+      return;
+    }
+    if (value === null || typeof value === "boolean" ||
+        (typeof value === "number" && Number.isFinite(value))) return;
+    if (typeof value !== "object") throw new TracePayloadError("Trace payload must contain only JSON values.");
+    if (ancestors.has(value)) throw new TracePayloadError("Trace JSON contains a circular value.");
+    const prototype = Object.getPrototypeOf(value);
+    if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
+      throw new TracePayloadError("Trace payload must contain plain JSON objects.");
+    }
+    ancestors.add(value);
+    try {
+      const keys = Reflect.ownKeys(value);
+      if (keys.length > 100_000) throw new TracePayloadError("Trace JSON contains too many properties.");
+      if (Array.isArray(value) && (value.length > 100_000 ||
+          keys.length !== value.length + 1)) {
+        throw new TracePayloadError("Trace JSON arrays must be dense and bounded.");
+      }
+      for (const key of keys) {
+        if (Array.isArray(value) && key === "length") continue;
+        if (typeof key !== "string") throw new TracePayloadError("Trace JSON cannot contain symbol keys.");
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) throw new TracePayloadError("Trace JSON cannot contain accessor or non-enumerable properties.");
+        if (Array.isArray(value) && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) {
+          throw new TracePayloadError("Trace JSON arrays cannot have custom properties.");
+        }
+        if (Array.isArray(value) && descriptor.value === undefined) {
+          throw new TracePayloadError("Trace JSON arrays cannot contain undefined values.");
+        }
+        visit(key, depth + 1);
+        // Optional fields explicitly set to undefined are common in SDK object
+        // builders and have the same meaning as omission when encoded as JSON.
+        if (descriptor.value !== undefined) visit(descriptor.value, depth + 1);
+      }
+    } finally { ancestors.delete(value); }
+  }
+  visit(input, 0);
+  if (new TextEncoder().encode(JSON.stringify(input)).byteLength > TRACE_LIMITS.payloadBytes) {
+    throw new TracePayloadError("Trace JSON exceeds the 2 MB payload limit.");
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -48,6 +109,7 @@ function requiredString(
     throw new TracePayloadError(`${location}.${key} must be a non-empty string.`);
   }
   const normalized = value.trim();
+  if (key === "id" || key === "agentId") encodeStageId(normalized);
   if (normalized.length > maxLength) {
     throw new TracePayloadError(
       `${location}.${key} must be at most ${maxLength} characters.`,
@@ -199,6 +261,7 @@ function parseEvents(items: unknown[]): TraceStage[] {
 }
 
 export function parseTracePayload(input: unknown): NormalizedTracePayload {
+  validateJsonPayload(input);
   if (!isRecord(input)) {
     throw new TracePayloadError("Trace payload must be a JSON object.");
   }
@@ -226,12 +289,20 @@ export function parseTracePayload(input: unknown): NormalizedTracePayload {
   );
   let stages: TraceStage[];
 
-  const hasStages = Array.isArray(input.stages);
-  const hasEvents = Array.isArray(input.events);
+  const hasStages = input.stages !== undefined;
+  const hasEvents = input.events !== undefined;
   if (hasStages === hasEvents) {
     throw new TracePayloadError(
       "Trace payload must include exactly one of stages or events.",
     );
+  }
+
+  const items = hasStages ? input.stages : input.events;
+  if (!Array.isArray(items)) {
+    throw new TracePayloadError("The trace container must be an array.");
+  }
+  if (items.length > TRACE_LIMITS.stages) {
+    throw new TracePayloadError(`A trace can contain at most ${TRACE_LIMITS.stages} stages.`);
   }
 
   if (hasStages) {

@@ -142,7 +142,11 @@ but do not create a rollback packet:
 3. restores its exact text as the retry input;
 4. reattaches the protected instruction when one exists;
 5. retries only the failed handoff;
-6. requires human approval before downstream execution.
+6. instructs the host to obtain human approval before downstream execution.
+
+The recovery packet is a plan, not a human authentication mechanism. The host
+must enforce its approval workflow before invoking `resetToLastVerified()` and
+releasing downstream work; reset itself restores the checkpoint immediately.
 
 `resetToLastVerified()` applies the checkpoint inside the SDK. For another host
 runtime, the packet remains plain data that its queue or retry controller can
@@ -192,6 +196,13 @@ preventing a resumed session from silently changing its detector policy.
 - A `LineageGuardSession` is a serial state machine. DAG analysis is supported,
   but a concurrent scheduler must still map branch execution and locks to the
   graph contract.
+- The session rejects overlapping agent/handoff operations and snapshots taken
+  during active agents, handoffs, tools or approvals. Tool inputs are detached
+  before authorization; state changes invalidate pending execution. Returned
+  reports and cached decisions do not expose mutable internal state.
+- Graph topological ties and incoming edges use deterministic ID ordering.
+  Contamination includes descendants of every blocking edge. The recovery packet
+  selects one primary retry; independent failures must also be repaired.
 - Snapshot durability is only as strong as the supplied store. Distributed
   locking, transactional outboxes, and approval issuance remain host concerns.
 - Built-in API quotas are per isolate. A high-scale multi-region deployment

@@ -146,7 +146,7 @@ test("extracts the claim fingerprint used by mutation replay", () => {
     "Some customers may improve by 12–18%, but it is not confirmed.",
   );
 
-  assert.deepEqual(snapshot.numbers, ["12-18%"]);
+  assert.deepEqual(snapshot.numbers, ["12%-18%"]);
   assert.equal(snapshot.certainty, "may");
   assert.equal(snapshot.scope, "some");
   assert.deepEqual(snapshot.negations, ["not"]);

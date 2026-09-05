@@ -6,7 +6,7 @@ import {
   type TraceStage,
 } from "./analysis.ts";
 import { fingerprintValue } from "./fingerprint.ts";
-import { TRACE_LIMITS, TracePayloadError } from "./trace-schema.ts";
+import { TRACE_LIMITS, TracePayloadError, encodeStageId, validateJsonPayload } from "./trace-schema.ts";
 import { PIPELINE_VERSION } from "./version.ts";
 
 export type TraceGraphStage = TraceStage & {
@@ -128,10 +128,11 @@ function highestSeverity(issues: LineageIssue[]): Severity | "clean" {
 }
 
 function graphEdgeId(from: string, to: string) {
-  return `${encodeURIComponent(from)}->${encodeURIComponent(to)}`;
+  return `${encodeStageId(from)}->${encodeStageId(to)}`;
 }
 
 function validateAndSortGraph(nodes: readonly TraceGraphStage[]) {
+  if (!Array.isArray(nodes)) throw new TracePayloadError("Graph nodes must be an array.");
   if (nodes.length < 2) {
     throw new TracePayloadError(
       "A trace graph needs at least two nodes and one edge.",
@@ -145,8 +146,16 @@ function validateAndSortGraph(nodes: readonly TraceGraphStage[]) {
 
   const nodeById = new Map<string, TraceGraphStage>();
   let totalTextCharacters = 0;
-  nodes.forEach((node, index) => {
+  nodes.forEach((node: TraceGraphStage, index: number) => {
+    if ((!node || typeof node !== "object" || Array.isArray(node)) || typeof node.id !== "string" || typeof node.label !== "string" ||
+        typeof node.text !== "string" || !Array.isArray(node.parentIds) ||
+        node.parentIds.some((id) => typeof id !== "string") ||
+        (node.inheritedClaims !== undefined && (typeof node.inheritedClaims !== "object" || node.inheritedClaims === null || Array.isArray(node.inheritedClaims) ||
+          Object.values(node.inheritedClaims).some((claim) => typeof claim !== "string")))) {
+      throw new TracePayloadError(`nodes[${index}] has invalid graph fields.`);
+    }
     const id = node.id.trim();
+    encodeStageId(id);
     if (!id || !node.label.trim() || !node.text.trim()) {
       throw new TracePayloadError(
         `nodes[${index}] id, label, and text must be non-empty.`,
@@ -170,9 +179,13 @@ function validateAndSortGraph(nodes: readonly TraceGraphStage[]) {
     if (nodeById.has(id)) {
       throw new TracePayloadError(`Graph node id "${id}" must be unique.`);
     }
-    const normalizedParents = node.parentIds.map((parentId) =>
-      parentId.trim(),
-    );
+    if (node.parentIds.length >= nodes.length) {
+      throw new TracePayloadError(`Graph node "${id}" has too many parents.`);
+    }
+    const normalizedParents = node.parentIds.map((parentId) => {
+      encodeStageId(parentId);
+      return parentId.trim();
+    }).sort();
     if (new Set(normalizedParents).size !== normalizedParents.length) {
       throw new TracePayloadError(
         `Graph node "${id}" contains a duplicate parent id.`,
@@ -183,6 +196,10 @@ function validateAndSortGraph(nodes: readonly TraceGraphStage[]) {
       (total, claim) => total + claim.trim().length,
       0,
     );
+    const claimKeys = Object.keys(node.inheritedClaims ?? {}).map((key) => key.trim());
+    if (new Set(claimKeys).size !== claimKeys.length) {
+      throw new TracePayloadError(`Graph node "${id}" contains duplicate normalized claim keys.`);
+    }
     nodeById.set(id, {
       ...node,
       id,
@@ -262,12 +279,18 @@ function validateAndSortGraph(nodes: readonly TraceGraphStage[]) {
 
   const queue = [...nodeById.values()]
     .filter((node) => node.parentIds.length === 0)
-    .map((node) => node.id);
+    .map((node) => node.id).sort();
   if (!queue.length) {
     throw new TracePayloadError("A trace graph needs at least one root node.");
   }
+  if (queue.length === nodes.length) {
+    throw new TracePayloadError("A trace graph needs at least one edge.");
+  }
   const order: string[] = [];
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    // Canonical ordering is an ID tie-break, not claimed chronology between
+    // independent branches. Sort only the still-ready portion of the queue.
+    queue.splice(cursor, queue.length - cursor, ...queue.slice(cursor).sort());
     const nodeId = queue[cursor];
     order.push(nodeId);
     for (const childId of children.get(nodeId) ?? []) {
@@ -326,12 +349,18 @@ export function runReliabilityGraphPipeline(
   }
   const { nodes, nodeById, children, roots } =
     validateAndSortGraph(inputNodes);
+  const totalText = guardrail.length + nodes.reduce((total, node) => total + node.text.length +
+    Object.values(node.inheritedClaims ?? {}).reduce((sum, text) => sum + text.length, 0), 0);
+  if (totalText > TRACE_LIMITS.totalTextCharacters) {
+    throw new TracePayloadError(`Trace graph text must total at most ${TRACE_LIMITS.totalTextCharacters} characters.`);
+  }
   const edges: GraphEdgeResult[] = [];
 
   for (const node of nodes) {
     for (const parentId of node.parentIds) {
       const parent = nodeById.get(parentId)!;
-      const comparedText = node.inheritedClaims?.[parentId] ?? node.text;
+      const comparedText = node.inheritedClaims && Object.hasOwn(node.inheritedClaims, parentId)
+        ? node.inheritedClaims[parentId] : node.text;
       const edgeIndex = edges.length;
       const edgeId = graphEdgeId(parentId, node.id);
       const pairAnalysis = analyzeLineage(
@@ -372,14 +401,13 @@ export function runReliabilityGraphPipeline(
     throw new TracePayloadError("A trace graph needs at least one edge.");
   }
 
-  const firstBlockingEdge =
-    edges.find(
+  const blockingEdges =
+    edges.filter(
       (edge) =>
         severityRank[edge.severity] >= severityRank[blockAtOrAbove],
-    ) ?? null;
-  const contaminated = firstBlockingEdge
-    ? descendantsFrom(firstBlockingEdge.to, children)
-    : new Set<string>();
+    );
+  const firstBlockingEdge = blockingEdges[0] ?? null;
+  const contaminated = new Set(blockingEdges.flatMap((edge) => [...descendantsFrom(edge.to, children)]));
   const graphNodes: GraphNodeResult[] = nodes.map((node, index) => ({
     ...node,
     topologicalIndex: index,
@@ -447,7 +475,7 @@ export function runReliabilityGraphPipeline(
               text: parent.text,
             };
           }),
-          contaminatedNodeIds: [...contaminated],
+          contaminatedNodeIds: nodes.filter((node) => contaminated.has(node.id)).map((node) => node.id),
           protectedInstruction: guardrail,
         }
       : {
@@ -466,6 +494,7 @@ export function runReliabilityGraphPipeline(
 export function parseTraceGraphPayload(
   input: unknown,
 ): NormalizedTraceGraphPayload {
+  validateJsonPayload(input);
   if (!isRecord(input)) {
     throw new TracePayloadError("Trace graph payload must be a JSON object.");
   }
@@ -474,6 +503,9 @@ export function parseTraceGraphPayload(
   }
   if (!Array.isArray(input.nodes)) {
     throw new TracePayloadError("Trace graph payload must include nodes.");
+  }
+  if (input.nodes.length > TRACE_LIMITS.stages) {
+    throw new TracePayloadError(`A trace graph can contain at most ${TRACE_LIMITS.stages} nodes.`);
   }
   if (input.runName !== undefined && typeof input.runName !== "string") {
     throw new TracePayloadError("runName must be a string when provided.");
@@ -555,6 +587,11 @@ export function parseTraceGraphPayload(
     throw new TracePayloadError(
       `guardrail must be at most ${TRACE_LIMITS.guardrailCharacters} characters.`,
     );
+  }
+  const totalText = guardrail.length + nodes.reduce((total, node) => total + node.text.length +
+    Object.values(node.inheritedClaims ?? {}).reduce((sum, text) => sum + text.length, 0), 0);
+  if (totalText > TRACE_LIMITS.totalTextCharacters) {
+    throw new TracePayloadError(`Trace graph text must total at most ${TRACE_LIMITS.totalTextCharacters} characters.`);
   }
 
   return {
