@@ -55,7 +55,9 @@ test("analyzes a DAG edge-by-edge and contains only descendants", () => {
   );
 
   assert.match(run.id, /^GRUN-[A-F0-9]{16}$/);
-  assert.equal(run.firstBlockingEdgeId, "research->writer");
+  // Independent incoming edges use canonical parent-ID ordering.
+  assert.equal(run.firstBlockingEdgeId, "policy->writer");
+  assert.equal(run.edges.find((edge) => edge.id === "research->writer")?.severity, "high");
   assert.deepEqual(
     new Set(run.recovery.contaminatedNodeIds),
     new Set(["writer", "publisher"]),
@@ -66,7 +68,7 @@ test("analyzes a DAG edge-by-edge and contains only descendants", () => {
   );
   assert.deepEqual(
     run.recovery.verifiedParents.map((parent) => parent.id),
-    ["research", "policy"],
+    ["policy", "research"],
   );
 });
 

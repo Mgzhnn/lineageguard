@@ -47,6 +47,7 @@ function parseKeyConfiguration():
   | { ok: false } {
   const raw = process.env.LINEAGEGUARD_API_KEYS_JSON?.trim();
   if (!raw) return { ok: true, keys: {} };
+  if (raw.length > 1_000_000) return { ok: false };
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -110,7 +111,7 @@ function authenticateTenant(request: Request):
   }
   const configuredTenants = Object.keys(configuration.keys);
   if (!configuredTenants.length) {
-    if (isLoopbackHostname(new URL(request.url).hostname)) {
+    if (process.env.NODE_ENV === "development" && isLoopbackHostname(new URL(request.url).hostname)) {
       return { ok: true, tenantId: "local-development" };
     }
     return {
@@ -130,8 +131,10 @@ function authenticateTenant(request: Request):
       error: "Tenant id and bearer token are required.",
     };
   }
-  const expected = configuration.keys[tenantId];
-  if (!expected || !equalSecret(bearerToken, expected)) {
+  const expected = Object.hasOwn(configuration.keys, tenantId)
+    ? configuration.keys[tenantId]
+    : undefined;
+  if (typeof expected !== "string" || !equalSecret(bearerToken, expected)) {
     return {
       ok: false,
       status: 401,

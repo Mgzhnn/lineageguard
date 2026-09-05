@@ -411,9 +411,10 @@ const numberUnitAlternation =
 // The trailing lookahead blocks partial unit matches ("500 gallons" must not
 // read as 500g).
 const numberPattern = new RegExp(
-  "(?:[$€£₩]\\s*)?\\d[\\d,]*(?:\\.\\d+)?" +
-    "(?:\\s*(?:-|–|—|to)\\s*(?:[$€£₩]\\s*)?\\d[\\d,]*(?:\\.\\d+)?)?" +
-    `(?:\\s*(?:${numberUnitAlternation}))?(?![a-z%])`,
+  "(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)\\d[\\d,]*(?:\\.\\d+)?" +
+    `(?:\\s*(?:${numberUnitAlternation}))?` +
+    "(?:\\s*(?:-|–|—|to)\\s*(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)\\d[\\d,]*(?:\\.\\d+)?" +
+    `(?:\\s*(?:${numberUnitAlternation}))?)?(?![a-z%])`,
   "gi",
 );
 
@@ -438,9 +439,20 @@ const wordNumberPattern = new RegExp(
   "gi",
 );
 
-function formatQuantityValue(value: number): string {
-  if (!Number.isFinite(value)) return String(value);
-  return String(parseFloat(value.toPrecision(12)));
+function shiftDecimal(value: string, power = 0): string {
+  const negative = value.startsWith("-");
+  const [whole, fraction = ""] = value.replace(/^[+-]/, "").split(".");
+  const digits = whole + fraction;
+  const point = whole.length + power;
+  const expanded = point <= 0
+    ? `0.${"0".repeat(-point)}${digits}`
+    : point >= digits.length
+      ? digits + "0".repeat(point - digits.length)
+      : `${digits.slice(0, point)}.${digits.slice(point)}`;
+  const [integer, decimals = ""] = expanded.split(".");
+  const significantDecimals = decimals.replace(/0+$/, "");
+  const result = integer.replace(/^0+(?=\d)/, "") + (significantDecimals ? `.${significantDecimals}` : "");
+  return negative && result !== "0" ? `-${result}` : result;
 }
 
 function singularizeMeasurableNoun(unit: string): string {
@@ -452,35 +464,36 @@ function singularizeMeasurableNoun(unit: string): string {
 
 function canonicalizeQuantitySide(side: string): string {
   const parsed = side.match(
-    /^([$€£₩]?)\s*(\d+(?:\.\d+)?)\s*(.*)$/,
+    /^([$€£₩]?)\s*([+-]?\d+(?:\.\d+)?)\s*(.*)$/,
   );
   if (!parsed) return side.replace(/\s+/g, "");
 
   const currency = parsed[1] ?? "";
-  let value = parseFloat(parsed[2]);
+  const value = parsed[2];
+  let decimalPower = 0;
   let unit = (parsed[3] ?? "").trim();
 
   if (unit === "thousand" || unit === "k") {
-    value *= 1e3;
+    decimalPower = 3;
     unit = "";
   } else if (unit === "million" || (unit === "m" && currency)) {
-    value *= 1e6;
+    decimalPower = 6;
     unit = "";
   } else if (unit === "billion" || (unit === "b" && currency)) {
-    value *= 1e9;
+    decimalPower = 9;
     unit = "";
   } else {
     const singular = singularizeMeasurableNoun(unit).replace(/s$/, "");
     const metric = metricUnitFactors[singular];
     if (metric) {
-      value *= metric.factor;
+      decimalPower = Math.round(Math.log10(metric.factor));
       unit = metric.base;
     } else {
       unit = singularizeMeasurableNoun(unit);
     }
   }
 
-  return `${currency}${formatQuantityValue(value)}${unit}`;
+  return `${currency}${shiftDecimal(value, decimalPower)}${unit}`;
 }
 
 function canonicalizeQuantityToken(raw: string): string {
@@ -490,12 +503,18 @@ function canonicalizeQuantityToken(raw: string): string {
     .replace(/\bpercent\b/g, "%")
     .replace(/\s+to\s+/g, "-")
     .replace(/[–—]/g, "-");
-  const sides = token
-    .split("-")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (!sides.length) return "";
-  return sides.map(canonicalizeQuantitySide).join("-");
+  // Separate the range delimiter from unary signs, then propagate the shared
+  // unit/currency before converting both endpoints.
+  const range = /^([$€£₩]?[+-]?\d+(?:\.\d+)?)([^\d-]*?)-([$€£₩]?[+-]?\d+(?:\.\d+)?)(.*)$/.exec(token.replace(/\s+/g, ""));
+  if (!range) return canonicalizeQuantitySide(token.replace(/^([+-])([$€£₩])/, "$2$1"));
+  let left = range[1];
+  let right = range[3];
+  const leftCurrency = left.match(/^[$€£₩]/)?.[0] ?? "";
+  const rightCurrency = right.match(/^[$€£₩]/)?.[0] ?? "";
+  if (!leftCurrency) left = rightCurrency + left;
+  if (!rightCurrency) right = leftCurrency + right;
+  return [canonicalizeQuantitySide(left + (range[2] || range[4])),
+    canonicalizeQuantitySide(right + (range[4] || range[2]))].join("-");
 }
 
 function extractWordNumberClaims(text: string): string[] {
@@ -515,7 +534,9 @@ function extractWordNumberClaims(text: string): string[] {
 }
 
 function extractNumberClaims(text: string) {
-  const { dates, remaining } = extractDateClaims(text);
+  const numericText = text.replace(/[０-９]/g, (digit) => String(digit.charCodeAt(0) - 0xff10))
+    .replace(/[−－]/g, "-").replace(/＋/g, "+").replace(/％/g, "%");
+  const { dates, remaining } = extractDateClaims(numericText);
   const digitClaims = [...remaining.matchAll(numberPattern)]
     .map((match) => canonicalizeQuantityToken(match[0]))
     .filter(Boolean);

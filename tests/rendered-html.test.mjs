@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readdir } from "node:fs/promises";
 import test from "node:test";
 
+// Production route fixtures authenticate explicitly; loopback Host is not identity.
+process.env.LINEAGEGUARD_API_KEYS_JSON = '{"render-fixture":"synthetic-render-secret"}';
+
 async function render(pathname = "/", init = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
@@ -12,6 +15,8 @@ async function render(pathname = "/", init = {}) {
       ...init,
       headers: {
         accept: "text/html",
+        authorization: "Bearer synthetic-render-secret",
+        "x-lineageguard-tenant": "render-fixture",
         ...init.headers,
       },
     }),
@@ -51,6 +56,24 @@ test("production static cache resolves hashed assets by URL path", async () => {
     entry,
     `static cache must resolve /assets/${cssName} via URL-style lookup`,
   );
+});
+
+test("metadata ignores untrusted forwarded origin headers", async () => {
+  const response = await render("/", { headers: {
+    "x-forwarded-host": "attacker.invalid", "x-forwarded-proto": "https",
+  } });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.doesNotMatch(html, /https:\/\/attacker\.invalid/);
+  assert.match(html, /https:\/\/lineageguard\.ugrp44group\.chatgpt\.site\/og\.png/);
+});
+
+test("production API rejects inherited tenant properties", async () => {
+  const response = await render("/api/evaluate", { method: "POST", headers: {
+    "content-type": "application/json", authorization: "Bearer [object Object]", "x-lineageguard-tenant": "__proto__",
+  }, body: JSON.stringify({ stages: [{ label: "Source", text: "Claim." }, { label: "Child", text: "Claim." }] }) });
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get("cache-control"), "no-store");
 });
 
 test("server-renders the LineageGuard workspace", async () => {

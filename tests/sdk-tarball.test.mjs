@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readdir,
+  readFile,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -116,6 +117,18 @@ test("packs and installs the real SDK tarball in an isolated consumer", async ()
       0,
       [smoke.stdout, smoke.stderr].filter(Boolean).join("\n"),
     );
+
+    // Execute the actual documented snippets, not a separately maintained copy.
+    for (const readme of [path.join(repositoryRoot, "README.md"), path.join(sdkRoot, "README.md")]) {
+      const source = await readFile(readme, "utf8");
+      const quickstart = source.match(/```js\n([\s\S]*?)\n```/);
+      assert.ok(quickstart, `${readme} must contain its runnable JS quickstart`);
+      const quickstartPath = path.join(consumer, "quickstart.mjs");
+      await writeFile(quickstartPath, quickstart[1]);
+      const execution = spawnSync(process.execPath, [quickstartPath], { cwd: consumer, encoding: "utf8" });
+      assert.equal(execution.status, 0, execution.stderr);
+      assert.equal(execution.stdout.trim(), "blocked\ntrue");
+    }
 
     await access(
       path.join(

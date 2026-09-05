@@ -43,3 +43,9 @@ advisories in `image-size@2.0.2`, pulled in by Vinext as development tooling.
 LineageGuard does not expose image uploads or call this parser at runtime. Keep
 tracking GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq, and remove this exception
 as soon as Vinext or `image-size` publishes a fixed dependency path.
+
+The 2026-09-05 audit updated fast-uri from 3.1.5 to patched 3.1.6 for four
+additional high-severity advisories. The audit gate passes with only the two
+existing image-size exceptions. These exceptions still count as known vulnerable
+dependencies; they are not a claim of zero vulnerabilities. See AUDIT.md for
+reproductions, exact test evidence, compatibility notes and remaining boundaries.

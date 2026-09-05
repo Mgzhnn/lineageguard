@@ -1,10 +1,11 @@
 import {
   runReliabilityGraphPipeline,
+  parseTraceGraphPayload,
   type NormalizedTraceGraphPayload,
   type ReliabilityGraphOptions,
   type TraceGraphStage,
 } from "../lib/graph.ts";
-import { TRACE_LIMITS, TracePayloadError } from "../lib/trace-schema.ts";
+import { TRACE_LIMITS, TracePayloadError, validateJsonPayload } from "../lib/trace-schema.ts";
 
 export type OtlpLineageOptions = {
   traceId?: string;
@@ -150,6 +151,10 @@ function decodeAnyValue(value: unknown, location: string): unknown {
   if (!isRecord(value)) {
     throw new TracePayloadError(`${location} must be an OTLP AnyValue object.`);
   }
+  const variants = ["stringValue", "boolValue", "intValue", "doubleValue", "bytesValue", "arrayValue", "kvlistValue"];
+  if (variants.filter((key) => Object.hasOwn(value, key)).length !== 1) {
+    throw new TracePayloadError(`${location} must contain exactly one AnyValue variant.`);
+  }
   if (typeof value.stringValue === "string") return value.stringValue;
   if (
     typeof value.boolValue === "boolean" ||
@@ -170,6 +175,7 @@ function decodeAnyValue(value: unknown, location: string): unknown {
     );
   }
   if (isRecord(value.kvlistValue)) {
+    const keys = new Set<string>();
     const entries = requireArray(
       value.kvlistValue.values,
       `${location}.kvlistValue.values`,
@@ -180,6 +186,8 @@ function decodeAnyValue(value: unknown, location: string): unknown {
           `${location}.kvlistValue.values[${index}] must contain a key.`,
         );
       }
+      if (keys.has(entry.key)) throw new TracePayloadError(`${location} contains duplicate key "${entry.key}".`);
+      keys.add(entry.key);
       return [
         entry.key,
         decodeAnyValue(
@@ -224,7 +232,8 @@ const IGNORED_CONTENT_KEYS = new Set([
 ]);
 
 function collectText(value: unknown, depth = 0): string[] {
-  if (depth > 12 || value === null || value === undefined) return [];
+  if (depth > 32) throw new TracePayloadError("OTLP message content exceeds the nesting limit.");
+  if (value === null || value === undefined) return [];
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return [];
@@ -236,7 +245,8 @@ function collectText(value: unknown, depth = 0): string[] {
         const parsed = JSON.parse(trimmed) as unknown;
         const nested = collectText(parsed, depth + 1);
         if (nested.length) return nested;
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         // A text response that merely resembles JSON is still valid content.
       }
     }
@@ -426,6 +436,7 @@ export function parseOtlpTracePayload(
   input: unknown,
   options: OtlpLineageOptions = {},
 ): NormalizedOtlpLineageTrace {
+  validateJsonPayload(input);
   if (!isRecord(options)) {
     throw new TracePayloadError("OTLP lineage options must be an object.");
   }
@@ -588,11 +599,10 @@ export function parseOtlpTracePayload(
       .find((value): value is string => value !== null) ??
     `OTLP trace ${traceId.slice(0, 8)}`;
 
+  const graph = parseTraceGraphPayload({ schemaVersion: "1.1", runName, guardrail, nodes });
   return {
     traceId,
-    runName,
-    guardrail,
-    nodes,
+    ...graph,
     selectedSpanIds: selected.map(({ span }) => span.spanId),
   };
 }

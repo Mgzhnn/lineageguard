@@ -10,6 +10,7 @@ import {
 } from "./analysis.ts";
 import { fingerprintValue } from "./fingerprint.ts";
 import { PIPELINE_VERSION } from "./version.ts";
+import { encodeStageId } from "./trace-schema.ts";
 
 export type PipelineModuleId =
   | "trace-collector"
@@ -235,9 +236,9 @@ export function runReliabilityPipeline(
         (issue) => issue.transitionIndex === transitionIndex,
       );
       return {
-        id: `${encodeURIComponent(
+        id: `${encodeStageId(
           stages[transitionIndex].id,
-        )}->${encodeURIComponent(stages[transitionIndex + 1].id)}`,
+        )}->${encodeStageId(stages[transitionIndex + 1].id)}`,
         from: stages[transitionIndex].id,
         to: stages[transitionIndex + 1].id,
         severity: transition.severity,

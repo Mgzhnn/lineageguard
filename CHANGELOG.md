@@ -2,6 +2,42 @@
 
 All notable changes to LineageGuard are documented here.
 
+## Unreleased
+
+- Reject inherited object properties as API tenant credentials and use a fixed
+  site origin for public metadata instead of trusting forwarded headers.
+- Distinguish special-value fingerprint tags from user objects and sparse arrays
+  from null arrays. Reject ambiguous accessors/custom array properties and use
+  locale-independent key ordering.
+- Copy approved tool inputs, invalidate authorization after session changes,
+  enforce serial agent/handoff operations, refuse in-flight snapshots, and detach
+  public reports, decisions and snapshot records from internal state.
+- Detect numeric signs, full-width digits and exact decimal differences; convert
+  decimal powers of ten without rounding and propagate shared range units.
+- Include every blocking graph branch in contamination, order ties by IDs, and
+  reject invalid graph/OTLP shapes, Unicode IDs, nested duplicate keys and excessive
+  JSON nesting or payload sizes before analysis.
+- Keep demo results tied to their analyzed snapshot, prevent stale export/copy,
+  handle clipboard failures and import races, and use accessible replay buttons.
+- Add adversarial regressions and 12 paired numeric evaluation cases, document
+  recovery responsibilities, and execute both README quickstarts from the tarball.
+- Update fast-uri to patched 3.1.6; retain the two documented image-size exceptions.
+
+### Compatibility notes
+
+These fixes change some previously allowed verdicts and malformed-input behavior.
+Numeric ranges now expose both endpoint units (for example `12%-18%`). Graph
+first-break tie ordering and fingerprints may change. Reports and cached handoff
+decisions retain value equality but no longer preserve object identity. Overlapping
+agent/handoff calls reject; snapshots require settled operations. Tool input
+identity is not preserved. Case-distinct tool names no longer share an idempotency
+fingerprint. Custom built-in subclasses (including Node Buffer) must be converted
+to supported plain values such as a private, non-shared Uint8Array. Special tag-shaped objects, sparse arrays, and locale-sensitive key
+orderings can produce different fingerprints; existing incompatible operation
+records fail closed and approvals may need reissuing. Public package export paths,
+package versions and snapshot schema version remain unchanged. Nothing here
+publishes a new npm version or deploys the live site.
+
 ## 0.7.0
 
 - Failed closed when either side of a handoff is blank instead of silently

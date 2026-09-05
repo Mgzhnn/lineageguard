@@ -16,6 +16,25 @@ pnpm add lineageguard
 Node.js 20 or newer is supported. The package includes ESM JavaScript,
 declaration files, source maps, and no runtime dependencies.
 
+## Runnable quickstart
+
+Save as `quickstart.mjs` and run `node quickstart.mjs`. No model, credentials,
+external tools, or host callbacks are needed:
+
+```js
+import { LineageGuardSession } from "lineageguard";
+
+const guard = new LineageGuardSession()
+  .recordSource("Budget", "The budget is $5k.");
+const decision = guard.inspectHandoff(
+  "writer", "Writer", "The budget is $50,000.",
+);
+console.log(decision.status); // blocked
+console.log(guard.isFrozen()); // true
+```
+
+The integration snippets below use host-supplied functions and data.
+
 ## Supervise an agent run
 
 ```ts
@@ -103,6 +122,30 @@ parents and same-trace links, and fails closed when a root output has no
 authoritative input.
 
 ## Exports
+
+Sessions are serial: overlapping agent/handoff calls reject before the second
+callback runs. Wait for all tools and approvals before calling `toSnapshot()` or
+`checkpoint()`. Tool inputs are detached copies; pending authorizations are
+invalidated if the session changes. Reports and decisions are defensive copies.
+Recovery instructions are plain data. The host must authenticate a reviewer
+before calling `resetToLastVerified()` or releasing downstream work; reset does
+not itself verify human approval. Distributed locks remain a host responsibility.
+
+Graph imports support at most 50 nodes. JSON imports are limited to 2 MB, 64 levels
+of nesting and 100,000 visited values/keys. Graph ties are ordered by ID, and
+contamination includes all blocking branches. A single recovery packet identifies
+the first retry; repair remaining independent breaks and reevaluate the graph.
+
+Numeric rules handle signed decimal values, full-width digits, exact powers of
+ten, and equivalent metric ranges. They do not establish arbitrary locale or
+multilingual semantic equivalence. A quiet lexical result is not proof of safety.
+
+Fingerprint encoding escapes tag-shaped objects and distinguishes sparse arrays.
+It rejects accessors, custom properties on built-in values, built-in subclasses,
+and nesting beyond 100 levels. Convert Node Buffer inputs to a private, non-shared Uint8Array.
+Ordinary lower-case ASCII JSON object fingerprints are preserved; tag-shaped
+objects, sparse arrays, and keys whose order differs under locale collation can
+change. Existing operation records with nonmatching fingerprints fail closed.
 
 - `lineageguard`: complete SDK and public types
 - `lineageguard/runtime`: runtime supervisor and tool boundary

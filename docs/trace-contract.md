@@ -77,7 +77,10 @@ strings.
 - A trace must contain one source and at least one handoff.
 - A trace can contain at most 50 stages.
 - Payloads are limited to 2,000,000 bytes.
+- JSON structure is limited to 64 nesting levels and 100,000 visited values/keys;
+  circular structures and accessors in in-process inputs are rejected.
 - IDs are limited to 128 characters and labels/run names to 200 characters.
+- IDs must contain well-formed Unicode, so they can form unambiguous edge IDs.
 - A guardrail is limited to 20,000 characters, each stage text to 500,000
   characters, and total trace text to 1,500,000 characters.
 - Duplicate event sequence numbers are rejected.
@@ -145,6 +148,13 @@ Call `parseTraceGraphPayload(payload)` and
 `runReliabilityGraphPipeline(nodes, guardrail, options)`. The graph report
 returns topological order, edge-specific issues, branch-aware contamination,
 verified merge parents, and the exact retry node.
+
+The same graph in another input order receives the same report fingerprint and
+primary blocking edge. ID order resolves topological ties; it does not establish
+chronology between independent branches. Contamination includes every blocking
+branch and its descendants. Repair the primary retry and any remaining independent
+breaks, then reevaluate. Graphs use the same 50-node and text limits; guardrails
+and inherited claim projections count toward the total text budget.
 
 ## OpenTelemetry OTLP/JSON
 

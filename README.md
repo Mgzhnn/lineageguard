@@ -13,7 +13,7 @@
 
 [**Open the live demo**](https://lineageguard.ugrp44group.chatgpt.site) · [npm package](https://www.npmjs.com/package/lineageguard) · [Framework integrations](./docs/framework-integrations.md)
 
-*A free, model-independent reliability control plane for AI agent handoffs.*
+*A free, model-optional reliability control plane for AI agent handoffs.*
 
 <img src="docs/media/hero.png" alt="The LineageGuard workspace: the live mutation tape highlights the first handoff where a claim mutated — 'Study suggests a 12–18% improvement' becomes 'Study shows an 18% improvement' — and marks it as the first break." width="100%" />
 
@@ -44,6 +44,45 @@ English; dynamic semantic analysis is available through a host-provided judge.
 | 🕸️ **DAG analyzers** | Chain and branch/merge analysis with per-parent claim projection |
 | 📡 **OTLP adapter** | Dependency-free OTLP/JSON ingestion for OpenTelemetry GenAI spans |
 | 🔬 **Forensic workspace** | Visual replay UI plus a framework-neutral HTTP/JSON gate |
+
+## Audit changes awaiting release
+
+This audit branch repairs tenant authentication, approval/input integrity,
+concurrent handoffs, snapshot safety, numeric canonicalization, graph
+contamination, and import/report validation. See [AUDIT.md](./AUDIT.md) for
+reproductions and verification results and
+[IMPLEMENTATION_PROMPT.md](./IMPLEMENTATION_PROMPT.md) for the requirements.
+These are source changes; a Git push does not update the npm package or live demo.
+
+Signed numeric changes and exact decimal conversions are now checked, range
+signals carry units on both endpoints, and every blocking graph branch is
+included in contamination. Graph ties use ID order, not inferred chronology.
+Returned reports and decisions are defensive copies. Await each agent/handoff;
+overlapping operations are rejected. Take snapshots only after operations settle.
+Tool inputs are copied before approval, and a session change invalidates pending
+authorization. Custom built-in subclasses (including Node Buffer) must be converted to plain
+values such as a private, non-shared Uint8Array. Some special-value fingerprints change; reissue affected approvals
+and do not rewrite persisted idempotency hashes to force a match.
+
+## Try the SDK without a model or credentials
+
+After installing `lineageguard`, save this as `quickstart.mjs` and run
+`node quickstart.mjs` on Node.js 20 or newer:
+
+```js
+import { LineageGuardSession } from "lineageguard";
+
+const guard = new LineageGuardSession()
+  .recordSource("Budget", "The budget is $5k.");
+const decision = guard.inspectHandoff(
+  "writer", "Writer", "The budget is $50,000.",
+);
+console.log(decision.status); // blocked
+console.log(guard.isFrozen()); // true
+```
+
+Use the packed audit build when verifying unreleased changes. The tarball test
+executes this quickstart from both READMEs against the packed package.
 
 ## How the pipeline works
 
@@ -410,9 +449,10 @@ is separate from analyzing a trace.
 LineageGuard is a smoke detector, not a truth machine. It catches explicit
 structural mutations but can miss subtle paraphrases, sarcasm, and a false
 claim that remains unchanged. It can also warn on a harmless rewrite. The
-built-in meaning and authority lexicons cover English. Other scripts raise
-a coverage signal rather than a deterministic verdict; use semantic mode or a
-domain rule when broader language understanding is required.
+built-in meaning and authority lexicons cover English. The coverage heuristic
+flags stages with at least 20 letters when fewer than 30% are in its Latin-script
+range; it does not identify every unsupported language or short phrase. Numeric
+checks still run. Use a semantic judge or domain rule for broader language review.
 Number canonicalization interprets bare `k` and currency-prefixed `m`/`b`
 magnitudes, complete dates, and common metric units; ambiguous partial forms
 stay literal. Domain teams can add inspectable `CustomLineageRule` extensions
@@ -426,6 +466,10 @@ The live `LineageGuardSession` remains a serial state machine even though DAG
 analysis is supported. Snapshot durability, distributed locks, globally
 coordinated quotas, authenticated approval issuance, and preventing code from
 bypassing the registered tool boundary remain host responsibilities.
+
+`resetToLastVerified()` does not authenticate a reviewer. It restores the
+checkpoint and clears the local freeze. The host must enforce the recovery
+packet's approval instructions before reset or downstream release.
 
 ## Project structure
 
