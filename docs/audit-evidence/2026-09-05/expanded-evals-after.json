@@ -1,0 +1,21 @@
+{
+  "dataset": "curated-regression-v2",
+  "threshold": "medium",
+  "metrics": {
+    "cases": 45,
+    "blockedCases": 22,
+    "allowedCases": 23,
+    "precision": 1,
+    "recall": 1,
+    "specificity": 1,
+    "falsePositiveRate": 0,
+    "expectedIssueCoverage": 1
+  },
+  "minimums": {
+    "precision": 0.9,
+    "recall": 0.9,
+    "specificity": 0.9,
+    "expectedIssueCoverage": 0.9
+  },
+  "failures": []
+}

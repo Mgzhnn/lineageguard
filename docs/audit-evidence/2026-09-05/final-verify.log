@@ -1,0 +1,928 @@
+$ pnpm lint && pnpm test && pnpm eval:check && pnpm test:sdk-tarball && pnpm demo:agent && pnpm demo:otel && pnpm demo:semantic
+$ eslint . --ignore-pattern dist --ignore-pattern .next
+$ pnpm test:engine && pnpm typecheck && pnpm test:sdk-package && vinext build && pnpm test:render
+$ node --experimental-strip-types --test tests/analysis.test.ts tests/api-security.test.ts tests/fingerprint.test.ts tests/graph.test.ts tests/otel.test.ts tests/pipeline.test.ts tests/trace-schema.test.ts tests/sdk.test.ts tests/runtime.test.ts tests/audit-regressions.test.ts
+TAP version 13
+# Subtest: finds the first numeric and confidence mutation
+ok 1 - finds the first numeric and confidence mutation
+  ---
+  duration_ms: 7.665656
+  type: 'test'
+  ...
+# Subtest: does not mark an equivalent clinical handoff as the first break
+ok 2 - does not mark an equivalent clinical handoff as the first break
+  ---
+  duration_ms: 1.176773
+  type: 'test'
+  ...
+# Subtest: flags a blocked external action when an agent claims completion
+ok 3 - flags a blocked external action when an agent claims completion
+  ---
+  duration_ms: 1.071204
+  type: 'test'
+  ...
+# Subtest: returns a clean result when structured claims stay stable
+ok 4 - returns a clean result when structured claims stay stable
+  ---
+  duration_ms: 0.596746
+  type: 'test'
+  ...
+# Subtest: detects scope inflation
+ok 5 - detects scope inflation
+  ---
+  duration_ms: 0.334368
+  type: 'test'
+  ...
+# Subtest: extracts the claim fingerprint used by mutation replay
+ok 6 - extracts the claim fingerprint used by mutation replay
+  ---
+  duration_ms: 0.489047
+  type: 'test'
+  ...
+# Subtest: normalizes equivalent numeric formatting before comparing claims
+ok 7 - normalizes equivalent numeric formatting before comparing claims
+  ---
+  duration_ms: 0.338848
+  type: 'test'
+  ...
+# Subtest: flags strong certainty and universal scope introduced from nowhere
+ok 8 - flags strong certainty and universal scope introduced from nowhere
+  ---
+  duration_ms: 0.252408
+  type: 'test'
+  ...
+# Subtest: does not treat an approval itself as a completed protected action
+ok 9 - does not treat an approval itself as a completed protected action
+  ---
+  duration_ms: 0.403338
+  type: 'test'
+  ...
+# Subtest: does not treat a negated action as completed
+ok 10 - does not treat a negated action as completed
+  ---
+  duration_ms: 0.542337
+  type: 'test'
+  ...
+# Subtest: keeps strong verbs scoped by an uncertainty qualifier
+ok 11 - keeps strong verbs scoped by an uncertainty qualifier
+  ---
+  duration_ms: 0.509097
+  type: 'test'
+  ...
+# Subtest: does not let a hedge hide certainty after a contrast boundary
+ok 12 - does not let a hedge hide certainty after a contrast boundary
+  ---
+  duration_ms: 0.238019
+  type: 'test'
+  ...
+# Subtest: supports inspectable domain rules without changing the core detector
+ok 13 - supports inspectable domain rules without changing the core detector
+  ---
+  duration_ms: 0.427157
+  type: 'test'
+  ...
+# Subtest: treats equivalent numeric rewrites as the same claim
+ok 14 - treats equivalent numeric rewrites as the same claim
+  ---
+  duration_ms: 0.833855
+  type: 'test'
+  ...
+# Subtest: still flags real numeric mutations after canonicalization
+ok 15 - still flags real numeric mutations after canonicalization
+  ---
+  duration_ms: 0.492197
+  type: 'test'
+  ...
+# Subtest: detects written-out number mutations next to measurable nouns
+ok 16 - detects written-out number mutations next to measurable nouns
+  ---
+  duration_ms: 0.687846
+  type: 'test'
+  ...
+# Subtest: never reports an unreadable script as clean
+ok 17 - never reports an unreadable script as clean
+  ---
+  duration_ms: 0.742926
+  type: 'test'
+  ...
+# Subtest: fails closed when a stage is empty
+ok 18 - fails closed when a stage is empty
+  ---
+  duration_ms: 0.083959
+  type: 'test'
+  ...
+# Subtest: rejects duplicate custom rules and malformed findings
+ok 19 - rejects duplicate custom rules and malformed findings
+  ---
+  duration_ms: 0.425288
+  type: 'test'
+  ...
+# Subtest: fails closed on an unconfigured public endpoint
+ok 20 - fails closed on an unconfigured public endpoint
+  ---
+  duration_ms: 12.06878
+  type: 'test'
+  ...
+# Subtest: accepts configured tenant credentials without storing raw keys
+ok 21 - accepts configured tenant credentials without storing raw keys
+  ---
+  duration_ms: 0.851265
+  type: 'test'
+  ...
+# Subtest: accepts workspace identity and limits each tenant independently
+ok 22 - accepts workspace identity and limits each tenant independently
+  ---
+  duration_ms: 0.262509
+  type: 'test'
+  ...
+# Subtest: AUD-01: inherited object properties never authenticate a tenant
+ok 23 - AUD-01: inherited object properties never authenticate a tenant
+  ---
+  duration_ms: 11.732622
+  type: 'test'
+  ...
+# Subtest: AUD-01: a loopback URL is not production authentication
+ok 24 - AUD-01: a loopback URL is not production authentication
+  ---
+  duration_ms: 0.374888
+  type: 'test'
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (0)
+ok 25 - AUD-02: typed values cannot collide with user records (0)
+  ---
+  duration_ms: 0.512267
+  type: 'test'
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (1)
+ok 26 - AUD-02: typed values cannot collide with user records (1)
+  ---
+  duration_ms: 0.141089
+  type: 'test'
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (2)
+ok 27 - AUD-02: typed values cannot collide with user records (2)
+  ---
+  duration_ms: 0.343438
+  type: 'test'
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (3)
+ok 28 - AUD-02: typed values cannot collide with user records (3)
+  ---
+  duration_ms: 0.234159
+  type: 'test'
+  ...
+# Subtest: AUD-02: typed values cannot collide with user records (4)
+ok 29 - AUD-02: typed values cannot collide with user records (4)
+  ---
+  duration_ms: 0.164279
+  type: 'test'
+  ...
+# Subtest: AUD-02: sparse arrays cannot impersonate arrays of null
+ok 30 - AUD-02: sparse arrays cannot impersonate arrays of null
+  ---
+  duration_ms: 0.217189
+  type: 'test'
+  ...
+# Subtest: AUD-03: execution uses the input actually approved across an await
+ok 31 - AUD-03: execution uses the input actually approved across an await
+  ---
+  duration_ms: 4.430104
+  type: 'test'
+  ...
+# Subtest: AUD-04: a freeze while approval is pending prevents execution
+ok 32 - AUD-04: a freeze while approval is pending prevents execution
+  ---
+  duration_ms: 3.38601
+  type: 'test'
+  ...
+# Subtest: AUD-04: synchronous authorization cannot execute after a same-tick freeze
+ok 33 - AUD-04: synchronous authorization cannot execute after a same-tick freeze
+  ---
+  duration_ms: 1.76225
+  type: 'test'
+  ...
+# Subtest: AUD-05: concurrent semantic handoffs cannot attach findings to another edge
+ok 34 - AUD-05: concurrent semantic handoffs cannot attach findings to another edge
+  ---
+  duration_ms: 1.088653
+  type: 'test'
+  ...
+# Subtest: AUD-06: snapshots cannot lose a pending one-time approval reservation
+ok 35 - AUD-06: snapshots cannot lose a pending one-time approval reservation
+  ---
+  duration_ms: 0.465457
+  type: 'test'
+  ...
+# Subtest: AUD-07: callers cannot edit an internal recovery checkpoint through getReport
+ok 36 - AUD-07: callers cannot edit an internal recovery checkpoint through getReport
+  ---
+  duration_ms: 1.004955
+  type: 'test'
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The change is -5%.
+ok 37 - AUD-08: numeric mutation is detected: The change is -5%.
+  ---
+  duration_ms: 0.308909
+  type: 'test'
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The change is −5%.
+ok 38 - AUD-08: numeric mutation is detected: The change is −5%.
+  ---
+  duration_ms: 1.314242
+  type: 'test'
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The value is 1.2345678901234.
+ok 39 - AUD-08: numeric mutation is detected: The value is 1.2345678901234.
+  ---
+  duration_ms: 0.225628
+  type: 'test'
+  ...
+# Subtest: AUD-08: numeric mutation is detected: The budget is ５０００.
+ok 40 - AUD-08: numeric mutation is detected: The budget is ５０００.
+  ---
+  duration_ms: 0.603807
+  type: 'test'
+  ...
+# Subtest: AUD-08: equivalent metric ranges compare equal
+ok 41 - AUD-08: equivalent metric ranges compare equal
+  ---
+  duration_ms: 0.560517
+  type: 'test'
+  ...
+# Subtest: AUD-08: percent and percentage points remain distinct
+ok 42 - AUD-08: percent and percentage points remain distinct
+  ---
+  duration_ms: 0.358678
+  type: 'test'
+  ...
+# Subtest: AUD-09: every broken branch and descendant is contaminated
+ok 43 - AUD-09: every broken branch and descendant is contaminated
+  ---
+  duration_ms: 1.333503
+  type: 'test'
+  ...
+# Subtest: AUD-10: graph results are invariant under node permutation
+ok 44 - AUD-10: graph results are invariant under node permutation
+  ---
+  duration_ms: 1.353662
+  type: 'test'
+  ...
+# Subtest: AUD-11: an edgeless graph is rejected
+ok 45 - AUD-11: an edgeless graph is rejected
+  ---
+  duration_ms: 0.468617
+  type: 'test'
+  ...
+# Subtest: AUD-11: prototype-like parent ids do not become inherited claim projections
+ok 46 - AUD-11: prototype-like parent ids do not become inherited claim projections
+  ---
+  duration_ms: 0.355608
+  type: 'test'
+  ...
+# Subtest: AUD-11: malformed Unicode ids are rejected by the importer
+ok 47 - AUD-11: malformed Unicode ids are rejected by the importer
+  ---
+  duration_ms: 0.267668
+  type: 'test'
+  ...
+# Subtest: AUD-12: cyclic AnyValue returns a validation error
+ok 48 - AUD-12: cyclic AnyValue returns a validation error
+  ---
+  duration_ms: 0.254678
+  type: 'test'
+  ...
+# Subtest: AUD-12: OTLP parser itself rejects invalid graph topology
+ok 49 - AUD-12: OTLP parser itself rejects invalid graph topology
+  ---
+  duration_ms: 0.657647
+  type: 'test'
+  ...
+# Subtest: AUD-12: duplicate nested attribute keys are rejected
+ok 50 - AUD-12: duplicate nested attribute keys are rejected
+  ---
+  duration_ms: 0.216469
+  type: 'test'
+  ...
+# Subtest: AUD-14: exports reject changed text, labels, guardrails and removed stages
+ok 51 - AUD-14: exports reject changed text, labels, guardrails and removed stages
+  ---
+  duration_ms: 0.887395
+  type: 'test'
+  ...
+# Subtest: AUD-02: fingerprinting never invokes array accessors
+ok 52 - AUD-02: fingerprinting never invokes array accessors
+  ---
+  duration_ms: 0.130099
+  type: 'test'
+  ...
+# Subtest: AUD-02: built-in value properties cannot disappear from approval scope
+ok 53 - AUD-02: built-in value properties cannot disappear from approval scope
+  ---
+  duration_ms: 0.203819
+  type: 'test'
+  ...
+# Subtest: AUD-03: shared memory cannot remain mutable after input capture
+ok 54 - AUD-03: shared memory cannot remain mutable after input capture
+  ---
+  duration_ms: 0.316998
+  type: 'test'
+  ...
+# Subtest: AUD-04: an already-running verifier is invalidated by a freeze and recovery
+ok 55 - AUD-04: an already-running verifier is invalidated by a freeze and recovery
+  ---
+  duration_ms: 1.133443
+  type: 'test'
+  ...
+# Subtest: AUD-07: editing a returned decision or snapshot cannot forge cached approval
+ok 56 - AUD-07: editing a returned decision or snapshot cannot forge cached approval
+  ---
+  duration_ms: 0.967114
+  type: 'test'
+  ...
+# Subtest: AUD-05: concurrent agents are rejected before the second callback runs
+ok 57 - AUD-05: concurrent agents are rejected before the second callback runs
+  ---
+  duration_ms: 0.897165
+  type: 'test'
+  ...
+# Subtest: AUD-10: incoming parent order does not change graph receipts
+ok 58 - AUD-10: incoming parent order does not change graph receipts
+  ---
+  duration_ms: 1.163593
+  type: 'test'
+  ...
+# Subtest: AUD-11: raw graph wrong types produce validation errors
+ok 59 - AUD-11: raw graph wrong types produce validation errors
+  ---
+  duration_ms: 0.128669
+  type: 'test'
+  ...
+# Subtest: AUD-12: ambiguous AnyValue variants are rejected
+ok 60 - AUD-12: ambiguous AnyValue variants are rejected
+  ---
+  duration_ms: 0.0918
+  type: 'test'
+  ...
+# Subtest: implements the published SHA-256 test vectors
+ok 61 - implements the published SHA-256 test vectors
+  ---
+  duration_ms: 0.727946
+  type: 'test'
+  ...
+# Subtest: canonical fingerprints are stable across object key order
+ok 62 - canonical fingerprints are stable across object key order
+  ---
+  duration_ms: 0.372248
+  type: 'test'
+  ...
+# Subtest: fails closed for ambiguous or circular input types
+ok 63 - fails closed for ambiguous or circular input types
+  ---
+  duration_ms: 0.328378
+  type: 'test'
+  ...
+# Subtest: analyzes a DAG edge-by-edge and contains only descendants
+ok 64 - analyzes a DAG edge-by-edge and contains only descendants
+  ---
+  duration_ms: 10.15395
+  type: 'test'
+  ...
+# Subtest: uses per-parent claim projections for clean merge edges
+ok 65 - uses per-parent claim projections for clean merge edges
+  ---
+  duration_ms: 0.984125
+  type: 'test'
+  ...
+# Subtest: rejects graph cycles and missing parents
+ok 66 - rejects graph cycles and missing parents
+  ---
+  duration_ms: 0.584477
+  type: 'test'
+  ...
+# Subtest: parses the versioned graph contract
+ok 67 - parses the versioned graph contract
+  ---
+  duration_ms: 0.473057
+  type: 'test'
+  ...
+# Subtest: rejects an invalid graph blocking threshold
+ok 68 - rejects an invalid graph blocking threshold
+  ---
+  duration_ms: 0.134449
+  type: 'test'
+  ...
+# Subtest: keeps graph edge ids unambiguous when node ids contain arrows
+ok 69 - keeps graph edge ids unambiguous when node ids contain arrows
+  ---
+  duration_ms: 0.744456
+  type: 'test'
+  ...
+# Subtest: copies graph builder inputs before storing them
+ok 70 - copies graph builder inputs before storing them
+  ---
+  duration_ms: 0.885465
+  type: 'test'
+  ...
+# Subtest: converts OTLP/JSON GenAI spans into a lineage graph
+ok 71 - converts OTLP/JSON GenAI spans into a lineage graph
+  ---
+  duration_ms: 2.432386
+  type: 'test'
+  ...
+# Subtest: detects mutation in OTLP output spans
+ok 72 - detects mutation in OTLP output spans
+  ---
+  duration_ms: 8.49675
+  type: 'test'
+  ...
+# Subtest: requires explicit trace selection for an OTLP batch
+ok 73 - requires explicit trace selection for an OTLP batch
+  ---
+  duration_ms: 0.642596
+  type: 'test'
+  ...
+# Subtest: fails closed when an OTLP root output has no authoritative input
+ok 74 - fails closed when an OTLP root output has no authoritative input
+  ---
+  duration_ms: 0.214669
+  type: 'test'
+  ...
+# Subtest: rejects malformed OTLP identifiers
+ok 75 - rejects malformed OTLP identifiers
+  ---
+  duration_ms: 0.179319
+  type: 'test'
+  ...
+# Subtest: validates custom OTLP attribute-key options
+ok 76 - validates custom OTLP attribute-key options
+  ---
+  duration_ms: 0.263708
+  type: 'test'
+  ...
+# Subtest: runs the complete reliability pipeline around one first break
+ok 77 - runs the complete reliability pipeline around one first break
+  ---
+  duration_ms: 9.091688
+  type: 'test'
+  ...
+# Subtest: returns a stable graph and no rollback for a clean run
+ok 78 - returns a stable graph and no rollback for a clean run
+  ---
+  duration_ms: 0.959015
+  type: 'test'
+  ...
+# Subtest: blocks a broken handoff before a downstream agent runs
+ok 79 - blocks a broken handoff before a downstream agent runs
+  ---
+  duration_ms: 11.255575
+  type: 'test'
+  ...
+# Subtest: never calls a side-effecting tool without approval
+ok 80 - never calls a side-effecting tool without approval
+  ---
+  duration_ms: 0.962284
+  type: 'test'
+  ...
+# Subtest: allows read-only tools and approved external actions
+ok 81 - allows read-only tools and approved external actions
+  ---
+  duration_ms: 1.120983
+  type: 'test'
+  ...
+# Subtest: sync approval preflight routes asynchronous verifiers to the async API
+ok 82 - sync approval preflight routes asynchronous verifiers to the async API
+  ---
+  duration_ms: 0.458158
+  type: 'test'
+  ...
+# Subtest: awaits an asynchronous approval verifier before executing
+ok 83 - awaits an asynchronous approval verifier before executing
+  ---
+  duration_ms: 0.420658
+  type: 'test'
+  ...
+# Subtest: reserves a one-time approval token during asynchronous verification
+ok 84 - reserves a one-time approval token during asynchronous verification
+  ---
+  duration_ms: 0.651057
+  type: 'test'
+  ...
+# Subtest: restores a checkpoint and retries only the failed agent
+ok 85 - restores a checkpoint and retries only the failed agent
+  ---
+  duration_ms: 2.054918
+  type: 'test'
+  ...
+# Subtest: recovery targets the first blocking transition, not an allowed low signal
+ok 86 - recovery targets the first blocking transition, not an allowed low signal
+  ---
+  duration_ms: 2.267037
+  type: 'test'
+  ...
+# Subtest: supports the same agent running more than once in a loop
+ok 87 - supports the same agent running more than once in a loop
+  ---
+  duration_ms: 1.78014
+  type: 'test'
+  ...
+# Subtest: explicit deny policy overrides an approval
+ok 88 - explicit deny policy overrides an approval
+  ---
+  duration_ms: 0.479647
+  type: 'test'
+  ...
+# Subtest: blocks tools until an authoritative source is recorded
+ok 89 - blocks tools until an authoritative source is recorded
+  ---
+  duration_ms: 0.199289
+  type: 'test'
+  ...
+# Subtest: host policy can classify a mislabeled tool as side-effecting
+ok 90 - host policy can classify a mislabeled tool as side-effecting
+  ---
+  duration_ms: 0.256518
+  type: 'test'
+  ...
+# Subtest: does not accept a reviewer name as authorization
+ok 91 - does not accept a reviewer name as authorization
+  ---
+  duration_ms: 0.187339
+  type: 'test'
+  ...
+# Subtest: registered tools keep side-effect classification under host control
+ok 92 - registered tools keep side-effect classification under host control
+  ---
+  duration_ms: 0.589367
+  type: 'test'
+  ...
+# Subtest: consumes scoped approvals once
+ok 93 - consumes scoped approvals once
+  ---
+  duration_ms: 0.581416
+  type: 'test'
+  ...
+# Subtest: deduplicates tool execution by operation fingerprint
+ok 94 - deduplicates tool execution by operation fingerprint
+  ---
+  duration_ms: 0.520637
+  type: 'test'
+  ...
+# Subtest: deduplicates concurrent tool execution before authorization resolves
+ok 95 - deduplicates concurrent tool execution before authorization resolves
+  ---
+  duration_ms: 0.429428
+  type: 'test'
+  ...
+# Subtest: deduplicates handoff recording and rejects key reuse
+ok 96 - deduplicates handoff recording and rejects key reuse
+  ---
+  duration_ms: 1.036694
+  type: 'test'
+  ...
+# Subtest: restores frozen sessions from durable snapshots
+ok 97 - restores frozen sessions from durable snapshots
+  ---
+  duration_ms: 1.65469
+  type: 'test'
+  ...
+# Subtest: persisted idempotency records fail closed when results are unavailable
+ok 98 - persisted idempotency records fail closed when results are unavailable
+  ---
+  duration_ms: 0.578316
+  type: 'test'
+  ...
+# Subtest: isolates observability failures by default
+ok 99 - isolates observability failures by default
+  ---
+  duration_ms: 0.230919
+  type: 'test'
+  ...
+# Subtest: agents receive a restricted tool client instead of the session by default
+ok 100 - agents receive a restricted tool client instead of the session by default
+  ---
+  duration_ms: 0.576887
+  type: 'test'
+  ...
+# Subtest: requires custom rule parity when restoring a session
+ok 101 - requires custom rule parity when restoring a session
+  ---
+  duration_ms: 0.609917
+  type: 'test'
+  ...
+# Subtest: rejects a snapshot with a corrupted enforcement policy
+ok 102 - rejects a snapshot with a corrupted enforcement policy
+  ---
+  duration_ms: 0.272028
+  type: 'test'
+  ...
+# Subtest: rejects invalid live enforcement policy instead of weakening it
+ok 103 - rejects invalid live enforcement policy instead of weakening it
+  ---
+  duration_ms: 0.220979
+  type: 'test'
+  ...
+# Subtest: blocks a paraphrase flagged by the semantic judge
+ok 104 - blocks a paraphrase flagged by the semantic judge
+  ---
+  duration_ms: 1.038474
+  type: 'test'
+  ...
+# Subtest: requires a semantic judge for hybrid and semantic modes
+ok 105 - requires a semantic judge for hybrid and semantic modes
+  ---
+  duration_ms: 0.154969
+  type: 'test'
+  ...
+# Subtest: semantic mode uses dynamic findings without deterministic fallback
+ok 106 - semantic mode uses dynamic findings without deterministic fallback
+  ---
+  duration_ms: 0.711325
+  type: 'test'
+  ...
+# Subtest: hybrid mode keeps deterministic evidence checks
+ok 107 - hybrid mode keeps deterministic evidence checks
+  ---
+  duration_ms: 0.721916
+  type: 'test'
+  ...
+# Subtest: applies the semantic judge in an existing framework loop
+ok 108 - applies the semantic judge in an existing framework loop
+  ---
+  duration_ms: 1.103044
+  type: 'test'
+  ...
+# Subtest: semantic judge failures fail closed by default and warn when configured
+ok 109 - semantic judge failures fail closed by default and warn when configured
+  ---
+  duration_ms: 1.337672
+  type: 'test'
+  ...
+# Subtest: persists semantic findings through snapshots
+ok 110 - persists semantic findings through snapshots
+  ---
+  duration_ms: 1.327602
+  type: 'test'
+  ...
+# Subtest: rejects rules that claim the reserved semantic judge id
+ok 111 - rejects rules that claim the reserved semantic judge id
+  ---
+  duration_ms: 0.121169
+  type: 'test'
+  ...
+# Subtest: instruments an agent run through the reusable SDK
+ok 112 - instruments an agent run through the reusable SDK
+  ---
+  duration_ms: 7.270257
+  type: 'test'
+  ...
+# Subtest: builds an SDK run from the generic JSON contract
+ok 113 - builds an SDK run from the generic JSON contract
+  ---
+  duration_ms: 1.332542
+  type: 'test'
+  ...
+# Subtest: normalizes an ordered event log into trace stages
+ok 114 - normalizes an ordered event log into trace stages
+  ---
+  duration_ms: 1.117884
+  type: 'test'
+  ...
+# Subtest: accepts the direct stages format
+ok 115 - accepts the direct stages format
+  ---
+  duration_ms: 0.489047
+  type: 'test'
+  ...
+# Subtest: rejects a handoff log without a source event
+ok 116 - rejects a handoff log without a source event
+  ---
+  duration_ms: 0.286958
+  type: 'test'
+  ...
+# Subtest: rejects duplicate stage ids before building an ambiguous graph
+ok 117 - rejects duplicate stage ids before building an ambiguous graph
+  ---
+  duration_ms: 0.145969
+  type: 'test'
+  ...
+# Subtest: creates unique stage instances when an event agent runs twice
+ok 118 - creates unique stage instances when an event agent runs twice
+  ---
+  duration_ms: 0.131759
+  type: 'test'
+  ...
+# Subtest: rejects ambiguous trace shapes and additional source events
+ok 119 - rejects ambiguous trace shapes and additional source events
+  ---
+  duration_ms: 0.200269
+  type: 'test'
+  ...
+# Subtest: rejects an unsupported schema version
+ok 120 - rejects an unsupported schema version
+  ---
+  duration_ms: 0.12672
+  type: 'test'
+  ...
+1..120
+# tests 120
+# suites 0
+# pass 120
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 134.906646
+$ tsc --noEmit
+$ pnpm build:sdk && node --test tests/sdk-package.test.mjs
+$ tsc -p sdk/tsconfig.build.json
+TAP version 13
+# Subtest: builds an importable dependency-free SDK package
+ok 1 - builds an importable dependency-free SDK package
+  ---
+  duration_ms: 11.909381
+  type: 'test'
+  ...
+# Subtest: package export targets exist after compilation
+ok 2 - package export targets exist after compilation
+  ---
+  duration_ms: 3.013862
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 45.432446
+
+  vinext build  (Vite 8.2.1)
+
+[1/5] analyze client references...
+[2Ktransforming...✓ 146 modules transformed.
+rendering chunks...
+✓ built in 255ms
+[2/5] analyze server references...
+[2Ktransforming...✓ 56 modules transformed.
+rendering chunks...
+✓ built in 54ms
+[3/5] build rsc environment...
+[2Ktransforming...✓ 152 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 293ms
+[4/5] build client environment...
+[2Ktransforming...✓ 64 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 108ms
+[5/5] build ssr environment...
+[2Ktransforming...✓ 62 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 159ms
+[0m
+  Route (app)
+  ┌ ? /            
+  ├ λ /api/evaluate
+  └ λ /api/health  
+
+  λ API  ? Unknown
+
+  ? Some routes could not be classified. vinext currently uses static analysis
+    and cannot detect dynamic API usage (headers(), cookies(), etc.) at build time.
+    Automatic classification will be improved in a future release.
+
+  Build complete. Run `vinext start` to start the production server.
+
+$ node --test tests/rendered-html.test.mjs
+TAP version 13
+# Subtest: production static cache resolves hashed assets by URL path
+ok 1 - production static cache resolves hashed assets by URL path
+  ---
+  duration_ms: 6.88542
+  type: 'test'
+  ...
+# Subtest: metadata ignores untrusted forwarded origin headers
+ok 2 - metadata ignores untrusted forwarded origin headers
+  ---
+  duration_ms: 72.461719
+  type: 'test'
+  ...
+# Subtest: production API rejects inherited tenant properties
+ok 3 - production API rejects inherited tenant properties
+  ---
+  duration_ms: 13.81123
+  type: 'test'
+  ...
+# Subtest: server-renders the LineageGuard workspace
+ok 4 - server-renders the LineageGuard workspace
+  ---
+  duration_ms: 25.501742
+  type: 'test'
+  ...
+# Subtest: exposes a deployment health contract
+ok 5 - exposes a deployment health contract
+  ---
+  duration_ms: 12.05597
+  type: 'test'
+  ...
+# Subtest: blocks an unsafe handoff through the framework-neutral API
+ok 6 - blocks an unsafe handoff through the framework-neutral API
+  ---
+  duration_ms: 16.495074
+  type: 'test'
+  ...
+# Subtest: does not create a recovery packet for an allowed warning
+ok 7 - does not create a recovery packet for an allowed warning
+  ---
+  duration_ms: 16.901202
+  type: 'test'
+  ...
+# Subtest: rejects invalid API configuration and media types
+ok 8 - rejects invalid API configuration and media types
+  ---
+  duration_ms: 26.453747
+  type: 'test'
+  ...
+# Subtest: enforces the API payload limit in bytes
+ok 9 - enforces the API payload limit in bytes
+  ---
+  duration_ms: 20.521551
+  type: 'test'
+  ...
+# Subtest: evaluates a branch-and-merge graph through the HTTP contract
+ok 10 - evaluates a branch-and-merge graph through the HTTP contract
+  ---
+  duration_ms: 16.384654
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 266.71764
+$ node --experimental-strip-types evals/run.ts --check
+{
+  "dataset": "curated-regression-v2",
+  "threshold": "medium",
+  "metrics": {
+    "cases": 45,
+    "blockedCases": 22,
+    "allowedCases": 23,
+    "precision": 1,
+    "recall": 1,
+    "specificity": 1,
+    "falsePositiveRate": 0,
+    "expectedIssueCoverage": 1
+  },
+  "minimums": {
+    "precision": 0.9,
+    "recall": 0.9,
+    "specificity": 0.9,
+    "expectedIssueCoverage": 0.9
+  },
+  "failures": []
+}
+$ node --test tests/sdk-tarball.test.mjs
+TAP version 13
+# Subtest: packs and installs the real SDK tarball in an isolated consumer
+ok 1 - packs and installs the real SDK tarball in an isolated consumer
+  ---
+  duration_ms: 1857.319775
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1890.016852
+$ node --experimental-strip-types examples/guarded-agent-runtime.ts
+[source-recorded] Authoritative source recorded as Customer request.
+[agent-started] Draft agent started.
+[handoff-allowed] No blocking reliability signal was found.
+[agent-started] Action agent started.
+[tool-blocked] send-email: send-email needs a scoped approval token from an authenticated reviewer.
+[agent-failed] LineageGuard approval-required: send-email needs a scoped approval token from an authenticated reviewer.
+Tool call stopped: send-email needs a scoped approval token from an authenticated reviewer.
+Emails actually sent: 0
+$ node --experimental-strip-types examples/otel-ingestion.ts
+Decision: BLOCK
+First blocking edge: 1111111111111111->2222222222222222
+Retry node: writer-agent
+$ node --experimental-strip-types examples/semantic-judge.ts
+[source-recorded] Authoritative source recorded as Safety board update.
+[agent-started] Summary agent started.
+[handoff-blocked] 1 reliability signal reached the medium blocking threshold.
+Run status: blocked
+Semantic finding: Paraphrase changed the claim's status

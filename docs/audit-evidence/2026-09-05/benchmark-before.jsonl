@@ -1,0 +1,3 @@
+{"name":"50-stage chain, repeated complete dates, 450000 text characters","milliseconds":216.83}
+{"name":"50-node wide DAG, 49 edges","milliseconds":142.24}
+{"name":"1000-node graph rejects at the documented limit","milliseconds":1.17}
