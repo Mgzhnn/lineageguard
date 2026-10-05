@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
 // Production route fixtures authenticate explicitly; loopback Host is not identity.
 process.env.LINEAGEGUARD_API_KEYS_JSON = '{"render-fixture":"synthetic-render-secret"}';
+
+// vinext >= 1.0 imports `cloudflare:workers` from the built Worker for its
+// Workers tracing integration. Node cannot resolve that scheme, so reuse the
+// resolve hook vinext itself registers before importing the bundle in Node.
+const { registerPrerenderCloudflareLoader } = await import(
+  new URL(
+    "../node_modules/vinext/dist/build/prerender-cloudflare-loader.js",
+    import.meta.url,
+  ).href
+);
+registerPrerenderCloudflareLoader();
 
 async function render(pathname = "/", init = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -42,19 +54,29 @@ test("production static cache resolves hashed assets by URL path", async () => {
     "../node_modules/vinext/dist/server/static-file-cache.js",
     import.meta.url,
   );
+  // The lookup below cannot fail on POSIX (path.sep is already "/"), so also
+  // assert the patched line is present in the installed module source. This
+  // is what makes the guard fail on Linux CI when the patch is lost.
+  const cacheModuleSource = await readFile(cacheModuleUrl, "utf8");
+  assert.ok(
+    cacheModuleSource.includes('.split(path.sep).join("/")'),
+    `${path.basename(cacheModuleUrl.pathname)} must contain the patched ` +
+      '`.split(path.sep).join("/")` cache-key normalization (patches/vinext.patch)',
+  );
   const { StaticFileCache } = await import(cacheModuleUrl.href);
   const clientDir = new URL("../dist/client/", import.meta.url);
-  const assetNames = await readdir(new URL("assets/", clientDir));
+  const cssDir = "_next/static/css/";
+  const assetNames = await readdir(new URL(cssDir, clientDir));
   const cssName = assetNames.find((name) => name.endsWith(".css"));
-  assert.ok(cssName, "expected a built CSS asset in dist/client/assets");
+  assert.ok(cssName, `expected a built CSS asset in dist/client/${cssDir}`);
 
   const cache = await StaticFileCache.create(
     decodeURIComponent(clientDir.pathname.replace(/^\/([A-Za-z]:)/, "$1")),
   );
-  const entry = cache.lookup(`/assets/${cssName}`);
+  const entry = cache.lookup(`/${cssDir}${cssName}`);
   assert.ok(
     entry,
-    `static cache must resolve /assets/${cssName} via URL-style lookup`,
+    `static cache must resolve /${cssDir}${cssName} via URL-style lookup`,
   );
 });
 
