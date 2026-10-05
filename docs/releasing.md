@@ -63,8 +63,9 @@ add at least one **Required reviewer** and restrict deployment branches and
 tags to `v*.*.*`. Without a required reviewer, anyone who can push a `v*` tag
 publishes to npm within a minute with no human in the loop. The workflow also
 refuses a tag whose commit is not on `main`, verifies on the same Node.js as
-CI, runs the Node.js 20 floor check, and publishes prerelease tags (`-rc.1`)
-under the `next` dist-tag. It uses short-lived OIDC credentials and does not
+CI, runs the Node.js 20 floor check, then switches to Node.js 24 with npm 11
+(trusted publishing needs npm 11.5.1+ and Node.js 22.14+) and publishes
+prerelease tags (`-rc.1`) under the `next` dist-tag. It uses short-lived OIDC credentials and does not
 require an npm token.
 
 ## 5. Publish intentionally
