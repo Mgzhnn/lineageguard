@@ -247,3 +247,42 @@ test("evaluates a branch-and-merge graph through the HTTP contract", async () =>
   assert.equal(payload.blockingEdgeId, "source->merge");
   assert.deepEqual(payload.recovery.contaminatedNodeIds, ["merge"]);
 });
+
+test("health advertises the per-isolate limit with no-store and nosniff", async () => {
+  const response = await render("/api/health");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  const payload = await response.json();
+  assert.ok(payload.capabilities.includes("per-isolate-rate-limit"));
+  assert.ok(!payload.capabilities.includes("per-tenant-rate-limit"));
+});
+
+test("the workspace live region is the one-line status only", async () => {
+  const response = await render();
+  const html = await response.text();
+  const liveRegions = html.match(/aria-live="[^"]*"/g) ?? [];
+  assert.equal(liveRegions.length, 1);
+  assert.match(html, /<div class="verdict-topline" aria-live="polite">/);
+  assert.doesNotMatch(html, /<aside class="report-panel" aria-live=/);
+});
+
+test("the workspace offers a paste-JSON import beside the file picker", async () => {
+  const response = await render();
+  const html = await response.text();
+  assert.match(html, /<label for="paste-trace">Paste trace JSON<\/label>/);
+  assert.match(html, /<textarea id="paste-trace"/);
+  assert.match(html, /Import pasted JSON/);
+  assert.match(html, /Import trace JSON/);
+});
+
+test("example buttons expose their selection with aria-pressed", async () => {
+  const response = await render();
+  const html = await response.text();
+  const exampleButtons = html.match(/<button aria-pressed="(true|false)" class="(selected)?"/g) ?? [];
+  assert.ok(exampleButtons.length >= 2, "expected example buttons with aria-pressed");
+  assert.equal(
+    exampleButtons.filter((button) => button.includes('aria-pressed="true"')).length,
+    1,
+  );
+});
