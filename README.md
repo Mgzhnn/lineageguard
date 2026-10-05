@@ -388,9 +388,11 @@ pnpm build
 pnpm test:render
 ```
 
-The current `curated-regression-v2` set contains 45 deliberately small
+The current `curated-regression-v2` set contains 54 deliberately small
 positive and negative English cases, including equivalence rewrites that must
-stay clean and structural mutations that must block:
+stay clean (contractions, `between X and Y`, currency words, the month May) and
+structural mutations that must block (including a hedge, quantifier or
+negation that is silently dropped from a restated claim):
 
 | Metric | Result |
 | --- | --- |

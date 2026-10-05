@@ -2,6 +2,27 @@
 
 All notable changes to LineageGuard are documented here.
 
+## Unreleased
+
+- Detect a hedge, limiting quantifier or `n't` contraction that is silently
+  dropped from a restated claim; stop reading contractions, the month May, an
+  imperative "never", "the most important" and reporting-verb tense changes as
+  drift; canonicalize `between X and Y`, currency words, hyphenated word
+  numbers and bare decimals.
+- Fingerprint approval tokens after trimming so a host verifier that trims
+  cannot let one approval execute a side-effect tool repeatedly, and make
+  `restore()` accept only its documented options so a resumed session cannot
+  have its threshold, tool policy or analysis mode replaced.
+- Bound graph evaluation by parent-link count and compared characters so a
+  dense in-limit payload cannot monopolize the API worker; validate duplicate
+  stage ids and the recovery index on the public pipeline entry; reject a
+  malformed workspace identity header; route every 1.1 payload to the graph
+  parser; allow the workspace to build up to 50 stages.
+- Publish only tags that are on `main`, verify releases on the CI Node.js,
+  run the Node.js 20 floor check before publishing, and publish prerelease
+  tags under `next`. Group React packages in Dependabot and stop it from
+  bumping the patched `vinext`.
+
 ## 0.8.0
 
 - Reject inherited object properties as API tenant credentials and use a fixed

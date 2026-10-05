@@ -72,3 +72,23 @@ test("accepts workspace identity and limits each tenant independently", () => {
   assert.equal(limited.ok, false);
   if (!limited.ok) assert.equal(limited.status, 429);
 });
+
+test("rejects a malformed workspace identity header instead of minting a tenant", () => {
+  process.env.LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY = "true";
+  for (const value of ["a@x.com,evil", "not-an-email ; <script>", "two words@x.com", "a@x.com, b@y.com"]) {
+    const access = authorizeEvaluationRequest(
+      new Request("https://public.example/api/evaluate", {
+        headers: { "oai-authenticated-user-email": value },
+      }),
+    );
+    assert.equal(access.ok, false, value);
+    if (!access.ok) assert.equal(access.status, 401);
+  }
+  const access = authorizeEvaluationRequest(
+    new Request("https://public.example/api/evaluate", {
+      headers: { "oai-authenticated-user-email": " Reviewer@Example.com " },
+    }),
+  );
+  assert.equal(access.ok, true);
+  if (access.ok) assert.equal(access.tenantId, "workspace:reviewer@example.com");
+});

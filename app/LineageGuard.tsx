@@ -1,6 +1,7 @@
 "use client";
 
 import { examples } from "@/lib/examples";
+import { TRACE_LIMITS } from "@/lib/trace-schema";
 import { PRODUCT_VERSION } from "@/lib/version";
 import {
   issueLabels,
@@ -252,7 +253,8 @@ export default function LineageGuard() {
             <div className="input-actions">
               <button
                 className="secondary-button"
-                disabled={stages.length >= 7}
+                disabled={stages.length >= TRACE_LIMITS.stages}
+                title={`Up to ${TRACE_LIMITS.stages} stages per trace`}
                 onClick={addStage}
                 type="button"
               >

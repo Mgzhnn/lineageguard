@@ -73,3 +73,24 @@ test("returns a stable graph and no rollback for a clean run", () => {
   assert.equal(run.ruleFamilyAgreement.active, 0);
   assert.ok(run.graph.nodes.every((node) => node.state === "clean"));
 });
+
+test("rejects duplicate stage ids and an out-of-range recovery index", () => {
+  assert.throws(
+    () =>
+      runReliabilityPipeline([
+        { id: "s", label: "Source", text: "Estimate 5%." },
+        { id: "s", label: "Agent", text: "Estimate 5%." },
+      ]),
+    /Duplicate stage id/,
+  );
+  assert.throws(
+    () => runReliabilityPipeline(brokenStages, "", { recoveryTransitionIndex: brokenStages.length }),
+    /recoveryTransitionIndex/,
+  );
+  assert.throws(
+    () => runReliabilityPipeline(brokenStages, "", { recoveryTransitionIndex: -1 }),
+    /recoveryTransitionIndex/,
+  );
+  // A single recorded source is still a legal run for the SDK.
+  assert.equal(runReliabilityPipeline([brokenStages[0]]).recovery.status, "not-required");
+});

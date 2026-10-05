@@ -58,9 +58,14 @@ On npmjs.com, configure the `lineageguard` package's trusted publisher with:
 - environment: `npm`;
 - allowed action: `npm publish`.
 
-Create the matching GitHub `npm` environment and require maintainer approval.
-Protect release tags so only reviewed commits can trigger a release. The
-workflow uses short-lived OIDC credentials and does not require an npm token.
+Create the matching GitHub `npm` environment and, under its protection rules,
+add at least one **Required reviewer** and restrict deployment branches and
+tags to `v*.*.*`. Without a required reviewer, anyone who can push a `v*` tag
+publishes to npm within a minute with no human in the loop. The workflow also
+refuses a tag whose commit is not on `main`, verifies on the same Node.js as
+CI, runs the Node.js 20 floor check, and publishes prerelease tags (`-rc.1`)
+under the `next` dist-tag. It uses short-lived OIDC credentials and does not
+require an npm token.
 
 ## 5. Publish intentionally
 

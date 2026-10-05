@@ -5,8 +5,29 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # React must move together: a react bump without react-dom fails the
+      # build (see Mgzhnn/lineageguard#20).
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
       development-dependencies:
         dependency-type: development
+        exclude-patterns:
+          - "react*"
+          - "@types/react*"
+          - "vinext"
+          - "@types/node"
+    ignore:
+      # vinext carries a committed patch (patches/vinext.patch) that Dependabot
+      # cannot regenerate, so every automated bump fails pnpm install. Bump it
+      # by hand with `pnpm patch vinext@<version>` and refresh the patch.
+      - dependency-name: "vinext"
+      # engines.node and CI pin the 22.x line.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

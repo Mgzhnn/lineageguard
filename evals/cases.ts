@@ -416,4 +416,79 @@ export const evaluationCases: EvaluationCase[] = [
     expectedBlocked: true,
     expectedIssueTypes: ["number"],
   },
+  {
+    id: "dropped-hedge",
+    description: "Detects a hedge that is silently removed from a restated claim.",
+    stages: chain(
+      "The treatment may reduce symptoms by 12–18%.",
+      "The treatment reduces symptoms by 12–18%.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["certainty"],
+  },
+  {
+    id: "dropped-quantifier",
+    description: "Detects a limiting quantifier that is silently removed.",
+    stages: chain(
+      "Some users reported the login issue.",
+      "Users reported the login issue.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["quantifier"],
+  },
+  {
+    id: "dropped-contraction-negation",
+    description: "Detects a dropped n't contraction.",
+    stages: chain(
+      "The result hasn't been confirmed.",
+      "The result has been confirmed.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["negation"],
+  },
+  {
+    id: "stable-contraction",
+    description: "Allows a negation to be contracted.",
+    stages: chain(
+      "The result has not been confirmed.",
+      "The result hasn't been confirmed.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-between-range",
+    description: "Allows a between-range to be written as a dash range.",
+    stages: chain("Growth was between 12% and 18%.", "Growth was 12–18%."),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-currency-word",
+    description: "Allows a currency symbol to be written as a word.",
+    stages: chain("The fee is $5,000.", "The fee is 5,000 dollars."),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-month-may",
+    description: "Allows the month May inside a date to be reformatted.",
+    stages: chain(
+      "The report will be published May 24, 2026.",
+      "The report will be published on 2026-05-24.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-imperative-never",
+    description: "Allows a prohibition to be restated with never.",
+    stages: chain(
+      "Do not send the email without approval.",
+      "Never send the email without approval.",
+    ),
+    expectedBlocked: false,
+  },
+  {
+    id: "stable-tense",
+    description: "Allows a tense change on a reporting verb.",
+    stages: chain("The study showed a 6% gain.", "The study shows a 6% gain."),
+    expectedBlocked: false,
+  },
 ];

@@ -104,18 +104,28 @@ const certaintyTerms: RankedTerm[] = [
   { term: "possible", rank: 0 },
   { term: "appears", rank: 0 },
   { term: "suggests", rank: 0 },
+  { term: "suggested", rank: 0 },
+  { term: "appeared", rank: 0 },
   { term: "estimated", rank: 0 },
   { term: "approximately", rank: 0 },
   { term: "likely", rank: 1 },
   { term: "indicates", rank: 1 },
+  { term: "indicated", rank: 1 },
   { term: "supports", rank: 1 },
   { term: "expected", rank: 1 },
   { term: "shows", rank: 2 },
+  { term: "showed", rank: 2 },
+  { term: "shown", rank: 2 },
   { term: "demonstrates", rank: 2 },
+  { term: "demonstrated", rank: 2 },
   { term: "will", rank: 2 },
   { term: "confirmed", rank: 3 },
   { term: "proves", rank: 3 },
+  { term: "proved", rank: 3 },
   { term: "proven", rank: 3 },
+  { term: "conclusive", rank: 3 },
+  { term: "definitive", rank: 3 },
+  { term: "guaranteed", rank: 3 },
   { term: "guarantees", rank: 3 },
   { term: "definitely", rank: 3 },
   { term: "certainly", rank: 3 },
@@ -131,12 +141,12 @@ const quantifierTerms: RankedTerm[] = [
   { term: "all", rank: 4 },
   { term: "every", rank: 4 },
   { term: "always", rank: 4 },
-  { term: "none", rank: 4 },
-  { term: "never", rank: 4 },
 ];
 
+// Any "...n't" contraction counts: normalize() folds curly apostrophes, so
+// "hasn't" and "hasn’t" both match, and dropping either is a lost negation.
 const negationPattern =
-  /\b(?:not|no|never|without|cannot|can't|won't|isn't|aren't|doesn't|don't|didn't|must not|do not)\b/gi;
+  /\b(?:not|no|none|never|without|cannot|must not|do not|\w+n't)\b/gi;
 
 const completedActionPattern =
   /\b(?:sent|emailed|contacted|published|posted|deleted|purchased|bought|booked|deployed|executed|transferred|submitted|released|shared)\b/gi;
@@ -215,6 +225,21 @@ function findTermIndex(text: string, term: string): number {
   return match ? match.index : -1;
 }
 
+function findTermIndexes(text: string, term: string): number[] {
+  if (hasNonAsciiLetters(term)) {
+    const indexes: number[] = [];
+    let from = text.indexOf(term);
+    while (from >= 0) {
+      indexes.push(from);
+      from = text.indexOf(term, from + term.length);
+    }
+    return indexes;
+  }
+  return [...text.matchAll(new RegExp(`\\b${escapeRegex(term)}\\b`, "gi"))]
+    .map((match) => match.index ?? -1)
+    .filter((index) => index >= 0);
+}
+
 function hasUncertaintyHedgeInClause(
   text: string,
   strongTermIndex: number,
@@ -239,7 +264,7 @@ function hasUncertaintyHedgeInClause(
   const contrastBoundary =
     /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b/i;
   const hedgePattern =
-    /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appears|suggests|estimated|approximately|likely)\b/gi;
+    /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appears|appeared|suggests|suggested|estimated|approximately|likely)\b/gi;
   const hedges = [...clause.matchAll(hedgePattern)];
   for (const hedge of hedges) {
     if (hedge.index === undefined) continue;
@@ -259,21 +284,30 @@ function findTerms(
   terms: RankedTerm[],
   scopeStrongTermsWithUncertainty = false,
 ) {
-  const normalized = normalize(text);
-  return terms.filter(({ term, rank }) => {
-    const matchIndex = findTermIndex(normalized, term);
-    if (matchIndex < 0) return false;
-    const prefix = normalized.slice(Math.max(0, matchIndex - 18), matchIndex);
-    if (/\b(?:not|no|never)\s+(?:been\s+)?$/i.test(prefix)) return false;
-    if (
-      scopeStrongTermsWithUncertainty &&
-      rank >= 2 &&
-      hasUncertaintyHedgeInClause(normalized, matchIndex, term.length)
-    ) {
-      return false;
-    }
-    return true;
-  });
+  // Complete dates are blanked first so the month "May" is never read as a
+  // hedge; "may 24" without a year is excluded by the digit check below.
+  const normalized = normalize(extractDateClaims(text).remaining);
+  return terms.filter(({ term, rank }) =>
+    findTermIndexes(normalized, term).some((matchIndex) => {
+      const prefix = normalized.slice(Math.max(0, matchIndex - 24), matchIndex);
+      const suffix = normalized.slice(matchIndex + term.length, matchIndex + term.length + 12);
+      if (/\b(?:not|no|none|never|\w+n't)\s+(?:(?:been|be|being|yet|fully)\s+){0,2}$/i.test(prefix)) {
+        return false;
+      }
+      if (term === "may" && /^\s*\d/.test(suffix)) return false;
+      // "the most important factor" is not a population; "most users",
+      // "most of them" and "most people" are.
+      if (term === "most" && !/^\s+(?:of\b|people\b|\w+s\b)/.test(suffix)) return false;
+      if (
+        scopeStrongTermsWithUncertainty &&
+        rank >= 2 &&
+        hasUncertaintyHedgeInClause(normalized, matchIndex, term.length)
+      ) {
+        return false;
+      }
+      return true;
+    }),
+  );
 }
 
 function highestRankedTerm(
@@ -411,9 +445,9 @@ const numberUnitAlternation =
 // The trailing lookahead blocks partial unit matches ("500 gallons" must not
 // read as 500g).
 const numberPattern = new RegExp(
-  "(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)\\d[\\d,]*(?:\\.\\d+)?" +
+  "(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)" +
     `(?:\\s*(?:${numberUnitAlternation}))?` +
-    "(?:\\s*(?:-|–|—|to)\\s*(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)\\d[\\d,]*(?:\\.\\d+)?" +
+    "(?:\\s*(?:-|–|—|to)\\s*(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)" +
     `(?:\\s*(?:${numberUnitAlternation}))?)?(?![a-z%])`,
   "gi",
 );
@@ -435,7 +469,7 @@ const wordNumberTens: Record<string, number> = {
 const wordNumberPattern = new RegExp(
   `\\b(?:(${Object.keys(wordNumberTens).join("|")})(?:[-\\s](${
     Object.keys(wordNumberUnits).filter((word) => wordNumberUnits[word] >= 1 && wordNumberUnits[word] <= 9).join("|")
-  }))?|(${Object.keys(wordNumberUnits).join("|")}))\\s+(percent|${measurableNouns})\\b`,
+  }))?|(${Object.keys(wordNumberUnits).join("|")}))[-\\s]+(percent|${measurableNouns})\\b`,
   "gi",
 );
 
@@ -464,7 +498,7 @@ function singularizeMeasurableNoun(unit: string): string {
 
 function canonicalizeQuantitySide(side: string): string {
   const parsed = side.match(
-    /^([$€£₩]?)\s*([+-]?\d+(?:\.\d+)?)\s*(.*)$/,
+    /^([$€£₩]?)\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(.*)$/,
   );
   if (!parsed) return side.replace(/\s+/g, "");
 
@@ -505,7 +539,7 @@ function canonicalizeQuantityToken(raw: string): string {
     .replace(/[–—]/g, "-");
   // Separate the range delimiter from unary signs, then propagate the shared
   // unit/currency before converting both endpoints.
-  const range = /^([$€£₩]?[+-]?\d+(?:\.\d+)?)([^\d-]*?)-([$€£₩]?[+-]?\d+(?:\.\d+)?)(.*)$/.exec(token.replace(/\s+/g, ""));
+  const range = /^([$€£₩]?[+-]?(?:\d+(?:\.\d+)?|\.\d+))([^\d-]*?)-([$€£₩]?[+-]?(?:\d+(?:\.\d+)?|\.\d+))(.*)$/.exec(token.replace(/\s+/g, ""));
   if (!range) return canonicalizeQuantitySide(token.replace(/^([+-])([$€£₩])/, "$2$1"));
   let left = range[1];
   let right = range[3];
@@ -536,7 +570,21 @@ function extractWordNumberClaims(text: string): string[] {
 function extractNumberClaims(text: string) {
   const numericText = text.replace(/[０-９]/g, (digit) => String(digit.charCodeAt(0) - 0xff10))
     .replace(/[−－]/g, "-").replace(/＋/g, "+").replace(/％/g, "%");
-  const { dates, remaining } = extractDateClaims(numericText);
+  const { dates, remaining: dated } = extractDateClaims(numericText);
+  // Rewrites that mean the same number: "between 12% and 18%" is the range
+  // 12–18%, and "5,000 dollars" is $5,000.
+  const remaining = dated
+    .replace(
+      /\bbetween\s+([$€£₩]?[+-]?\d[^\s]*)\s+and\s+(?=[$€£₩]?[+-]?\d)/gi,
+      "$1 to ",
+    )
+    .replace(
+      /(\d[\d,]*(?:\.\d+)?(?:\s*(?:k|thousand|million|billion))?)\s+(dollars?|usd|euros?|eur|pounds?|gbp)\b/gi,
+      (_match, amount: string, word: string) => {
+        const symbol = /^(dollars?|usd)$/i.test(word) ? "$" : /^(euros?|eur)$/i.test(word) ? "€" : "£";
+        return `${symbol}${amount}`;
+      },
+    );
   const digitClaims = [...remaining.matchAll(numberPattern)]
     .map((match) => canonicalizeQuantityToken(match[0]))
     .filter(Boolean);
@@ -605,6 +653,27 @@ function importantGuardrailWords(text: string) {
           (hasNonAsciiLetters(word) ? word.length >= 2 : word.length > 2),
       ),
   );
+}
+
+// A dropped qualifier only counts when the next stage is still talking about
+// the same claim. A handoff that moves on to other content (a summary of a
+// different part, a status note) keeps at least half of nothing, so it does
+// not trigger the rule.
+// "still requires verification" carries the same qualification as "pending"
+// even though no hedge word survives, so it is not a dropped hedge.
+const verificationRequirementPattern =
+  /\b(?:requires?|needs?|awaits?|awaiting|pending|under|before|without|until|subject to)\s+(?:(?:further|additional|a|an|the|human|independent)\s+){0,2}(?:verification|review|confirmation|validation|approval|testing|audit)\b/i;
+
+function keepsVerificationRequirement(text: string) {
+  return verificationRequirementPattern.test(normalize(text));
+}
+
+function restatesClaim(fromText: string, toText: string) {
+  const words = importantGuardrailWords(fromText);
+  if (words.length < 2) return false;
+  const toNormalized = normalize(toText);
+  const retained = words.filter((word) => findTermIndex(toNormalized, word) >= 0);
+  return retained.length / words.length >= 0.5;
 }
 
 function excerpt(text: string, terms: string[]) {
@@ -818,8 +887,50 @@ function analyzeTransition(
     );
   }
 
+  if (
+    beforeCertainty &&
+    beforeCertainty.rank === 0 &&
+    !afterCertainty &&
+    !keepsVerificationRequirement(to.text) &&
+    restatesClaim(from.text, to.text)
+  ) {
+    issues.push(
+      makeIssue(
+        "certainty",
+        "medium",
+        transitionIndex,
+        from,
+        to,
+        "A hedge was dropped",
+        `The earlier handoff qualified the claim with “${beforeCertainty.term}”, but the next handoff restates it with no certainty qualifier at all.`,
+        [beforeCertainty.term],
+        [],
+      ),
+    );
+  }
+
   const beforeQuantifier = highestRankedTerm(from.text, quantifierTerms);
   const afterQuantifier = highestRankedTerm(to.text, quantifierTerms);
+  if (
+    beforeQuantifier &&
+    beforeQuantifier.rank <= 1 &&
+    !afterQuantifier &&
+    restatesClaim(from.text, to.text)
+  ) {
+    issues.push(
+      makeIssue(
+        "quantifier",
+        "medium",
+        transitionIndex,
+        from,
+        to,
+        "A limiting quantifier was dropped",
+        `The earlier handoff limited the population with “${beforeQuantifier.term}”, but the next handoff restates the claim with no population qualifier.`,
+        [beforeQuantifier.term],
+        [],
+      ),
+    );
+  }
   if (
     afterQuantifier &&
     ((beforeQuantifier && afterQuantifier.rank > beforeQuantifier.rank) ||

@@ -240,6 +240,14 @@ export type LineageGuardSnapshotStore = {
   save(snapshot: LineageGuardSessionSnapshot): Promise<void>;
 };
 
+// The one-time ledger must agree with the host verifier about which token
+// strings are "the same" approval. Verifiers routinely trim what reviewers
+// paste, so the ledger fingerprints the trimmed token; everything else is
+// byte-exact. Hosts that canonicalize further must do so before calling.
+function approvalTokenFingerprint(token: string) {
+  return sha256Hex(token.trim());
+}
+
 export type LineageGuardRestoreOptions = Pick<
   LineageGuardSessionOptions,
   | "rules"
@@ -1214,7 +1222,7 @@ export class LineageGuardSession {
           requiresApproval,
         };
       }
-      const tokenFingerprint = sha256Hex(approval.token);
+      const tokenFingerprint = approvalTokenFingerprint(approval.token);
       if (
         this.consumedApprovalTokenFingerprints.has(tokenFingerprint) ||
         this.pendingApprovalTokenFingerprints.has(tokenFingerprint)
@@ -1305,7 +1313,7 @@ export class LineageGuardSession {
     }
 
     const approval = prepared.intent.approval!;
-    const tokenFingerprint = sha256Hex(approval.token);
+    const tokenFingerprint = approvalTokenFingerprint(approval.token);
     this.pendingApprovalTokenFingerprints.add(tokenFingerprint);
     try {
       let approvalVerified = false;
@@ -1566,7 +1574,16 @@ export class LineageGuardSession {
       analysisMode: snapshot.analysisMode,
       toolPolicy: snapshot.toolPolicy,
       exposeSessionToAgents: snapshot.exposeSessionToAgents,
-      ...options,
+      // Only the documented restore options may be supplied here. Spreading
+      // the whole bag would let a plain-JavaScript caller replace the
+      // snapshot's blockAtOrAbove, toolPolicy or analysisMode on resume.
+      approvalVerifier: options.approvalVerifier,
+      semanticJudge: options.semanticJudge,
+      semanticJudgeFailureMode: options.semanticJudgeFailureMode,
+      tools: options.tools,
+      onEvent: options.onEvent,
+      onEventError: options.onEventError,
+      eventSinkFailureMode: options.eventSinkFailureMode,
       rules: restoredRules,
     });
     session.stages = snapshot.stages.map((stage) => ({ ...stage }));
