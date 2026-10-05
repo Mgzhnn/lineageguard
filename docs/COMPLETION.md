@@ -30,10 +30,10 @@ and `pnpm verify` is green.
 
 ## 2. Dependencies (the two blockers behind every failed Dependabot PR)
 
-- [ ] **2.1** Bump `vinext` to 1.0.1 by hand, regenerate `patches/vinext.patch`
+- [x] **2.1** Bump `vinext` to 1.0.1 by hand, regenerate `patches/vinext.patch`
       with `pnpm patch vinext@1.0.1`, key the patch as `vinext@1.0.1`.
       *Check:* `pnpm install --frozen-lockfile` succeeds; `pnpm verify` is green.
-- [ ] **2.2** Make the patch-guard test fail when the patch is lost on Linux:
+- [x] **2.2** Make the patch-guard test fail when the patch is lost on Linux:
       in `tests/rendered-html.test.mjs`, assert the module source contains
       `.split(path.sep).join("/")`.
       *Check:* temporarily removing the patch makes the test fail on Linux.
@@ -47,48 +47,48 @@ and `pnpm verify` is green.
 
 ## 3. SDK runtime (`sdk/runtime.ts`)
 
-- [ ] **3.1** Semantic judge timeout: add `semanticJudgeTimeoutMs` (default
+- [x] **3.1** Semantic judge timeout: add `semanticJudgeTimeoutMs` (default
       30 000), race the judge against it, pass an `AbortSignal` in
       `SemanticJudgeContext`, and treat a timeout as a judge failure under
       `semanticJudgeFailureMode`.
       *Check:* a never-resolving judge produces a blocked (or warned) decision
       within the timeout, and `toSnapshot()` works afterwards.
-- [ ] **3.2** Enforce `TRACE_LIMITS` inside the session: `makeStage` and
+- [x] **3.2** Enforce `TRACE_LIMITS` inside the session: `makeStage` and
       `commitHandoff` reject ids, labels, stage text, total text and stage count
       beyond the limits with a blocked decision (not a crash).
       *Check:* a 51st handoff and a 500 001-character output are both blocked;
       every snapshot the session produces round-trips through
       `parseTracePayload`.
-- [ ] **3.3** Export `TracePayloadError`, `TRACE_LIMITS`,
+- [x] **3.3** Export `TracePayloadError`, `TRACE_LIMITS`,
       `PersistedToolExecution` and `PersistedHandoffRequest` from
       `sdk/index.ts`.
       *Check:* `tests/sdk-package.test.mjs` asserts the four names exist on the
       built package.
-- [ ] **3.4** Event-sink ordering: compute the decision, emit, then commit, so a
+- [x] **3.4** Event-sink ordering: compute the decision, emit, then commit, so a
       sink that throws under `eventSinkFailureMode: "throw"` cannot leave the
       session frozen while the caller sees only the sink error. Give the sync
       `inspectHandoff` the same `handoffInProgress` guard as the async path.
       *Check:* with a throwing sink, `runSequence` returns `{status:"blocked"}`
       and `isFrozen()` matches the decision; re-entering `resetToLastVerified`
       from `onEvent` throws "in progress".
-- [ ] **3.5** Idempotency on failure: delete the execution record when the tool
+- [x] **3.5** Idempotency on failure: delete the execution record when the tool
       implementation throws, so a retry under the same key re-invokes the tool.
       Document the behaviour in `sdk/README.md`.
       *Check:* a tool that throws once and then succeeds runs twice under one
       key and returns the second result.
-- [ ] **3.6** OTLP text extraction (`sdk/otel.ts`): skip parts whose `type` is
+- [x] **3.6** OTLP text extraction (`sdk/otel.ts`): skip parts whose `type` is
       not `text`/`output_text`, and keep a JSON-shaped string as raw text
       unless it parses to a message/parts shape.
       *Check:* a span whose only output is a `tool_call` part produces no
       lineage node text from the call arguments; an assistant message
       `{"approved": true, "name": "Bob"}` keeps `name` in the node text.
-- [ ] **3.7** Split `sdk/runtime.ts` into `sdk/runtime/types.ts`,
+- [x] **3.7** Split `sdk/runtime.ts` into `sdk/runtime/types.ts`,
       `sdk/runtime/snapshot.ts`, `sdk/runtime/tool-gate.ts` and
       `sdk/runtime/session.ts`, re-exported from `sdk/index.ts` with no public
       API change.
       *Check:* `tests/runtime.test.ts` and `tests/sdk-package.test.mjs` pass
       unchanged; no file in `sdk/` exceeds 700 lines.
-- [ ] **3.8** Tests for the documented but untested entry points:
+- [x] **3.8** Tests for the documented but untested entry points:
       `registerTool`, `getToolClient`, `authorizeToolAsync`,
       `LineageGuardRun.setGuardrail`, `LineageGuardGraphRun.fromPayload`,
       `buildPlainTextReport`, and the `includeBuiltInRules`, `onEventError`,
@@ -97,20 +97,20 @@ and `pnpm verify` is green.
 
 ## 4. Detection engine (`lib/analysis.ts`)
 
-- [ ] **4.1** Authority rule precision: a completed-action verb only counts as
+- [x] **4.1** Authority rule precision: a completed-action verb only counts as
       a violation when the clause has an agentive subject (`I`, `we`, `the
       agent`, the stage label) or its object overlaps the guardrail's important
       words. "The customer sent us a complaint" and "the draft was shared with
       the reviewer for approval" are clean; "I sent the email" stays high.
       *Check:* those three cases are in `tests/analysis.test.ts` and
       `evals/cases.ts`.
-- [ ] **4.2** Coverage for Latin-script non-English text: lower
+- [x] **4.2** Coverage for Latin-script non-English text: lower
       `MIN_LETTERS_FOR_COVERAGE_CHECK` to 8 and add an English function-word
       ratio test, so German or Spanish stages produce a low-severity coverage
       issue instead of "clean".
       *Check:* `"Das Ergebnis ist nicht bestätigt worden."` as a stage yields a
       `coverage` issue; every existing English eval case stays unchanged.
-- [ ] **4.3** Independent eval signal: add 20 cases that are not unit-test
+- [x] **4.3** Independent eval signal: add 20 cases that are not unit-test
       fixtures, at least 10 of them with three or more stages and multi-sentence
       text, and let `evals/run.ts` honour a `knownFailure: true` tag so the
       0.9 minimums become the binding gate rather than "any single miss fails".
@@ -119,27 +119,27 @@ and `pnpm verify` is green.
 
 ## 5. API (`app/api`, `lib/api-security.ts`)
 
-- [ ] **5.1** State the rate limit honestly: rename the health capability to
+- [x] **5.1** State the rate limit honestly: rename the health capability to
       `per-isolate-rate-limit`, and say in README "Connect another language"
       that the limit is a per-worker safety valve, not a quota.
       *Check:* `GET /api/health` no longer advertises `per-tenant-rate-limit`.
-- [ ] **5.2** Send `cache-control: no-store` and `x-content-type-options:
+- [x] **5.2** Send `cache-control: no-store` and `x-content-type-options:
       nosniff` on `/api/health` using the same helper as `/api/evaluate`.
       *Check:* `tests/api-security.test.ts` or `tests/rendered-html.test.mjs`
       asserts both headers.
 
 ## 6. Workspace (`app/`)
 
-- [ ] **6.1** Paste-JSON import: a textarea plus "Import pasted JSON" button
+- [x] **6.1** Paste-JSON import: a textarea plus "Import pasted JSON" button
       that reuses the same parsing branch as the file picker, including the
       2 MB check.
       *Check:* pasting the README quickstart payload loads it as stages.
-- [ ] **6.2** Schema 1.1 payloads: the import path detects `schemaVersion:
+- [x] **6.2** Schema 1.1 payloads: the import path detects `schemaVersion:
       "1.1"` and shows "Graph traces are evaluated by the API and SDK; the
       workspace renders chains" instead of a schemaVersion error. (Rendering
       graphs in the workspace is out of scope.)
       *Check:* importing a 1.1 payload shows that message.
-- [ ] **6.3** Accessibility and state hygiene: move `aria-live` to a one-line
+- [x] **6.3** Accessibility and state hygiene: move `aria-live` to a one-line
       status element; add `aria-pressed` to example buttons; disable the
       Confirm/False-positive buttons when the report is stale; derive
       `isFresh` from the current stages instead of a flag; map JSON
@@ -150,13 +150,13 @@ and `pnpm verify` is green.
 
 ## 7. Release plumbing and documentation
 
-- [ ] **7.1** `scripts/verify-release-tag.mjs` requires a `## <version>`
+- [x] **7.1** `scripts/verify-release-tag.mjs` requires a `## <version>`
       heading in `CHANGELOG.md`.
       *Check:* running it with a version absent from the changelog exits 1.
-- [ ] **7.2** `tests/sdk-tarball.test.mjs` reads the version from
+- [x] **7.2** `tests/sdk-tarball.test.mjs` reads the version from
       `sdk/package.json` instead of the literal `"0.8.0"`.
       *Check:* bumping the version does not require editing the test.
-- [ ] **7.3** Documentation sync: `CHANGELOG.md` says `fast-uri` 3.1.8;
+- [x] **7.3** Documentation sync: `CHANGELOG.md` says `fast-uri` 3.1.8;
       README says `pnpm verify` is the core of the gate and names the extra CI
       steps (`audit:security`, Node 20 smoke, `verify-release-tag`);
       `ARCHITECTURE.md` boundaries section states that the lexicons are

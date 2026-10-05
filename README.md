@@ -45,6 +45,19 @@ English; dynamic semantic analysis is available through a host-provided judge.
 | 📡 **OTLP adapter** | Dependency-free OTLP/JSON ingestion for OpenTelemetry GenAI spans |
 | 🔬 **Forensic workspace** | Visual replay UI plus a framework-neutral HTTP/JSON gate |
 
+## Changes in 0.9.0
+
+0.9.0 closes the 2026-10-05 audit and the completion plan in
+[docs/COMPLETION.md](./docs/COMPLETION.md). The detector now catches a hedge,
+quantifier or contraction that is silently dropped and no longer blocks
+contractions, `between X and Y`, currency words, the month May or a tense
+change. Approval tokens are fingerprinted after trimming, `restore()` accepts
+only its documented options, handoffs over the trace limits return a blocked
+decision, the semantic judge has a timeout, and dense graph payloads are
+bounded. The workspace accepts pasted JSON. Releases publish only from `main`
+and prereleases go to the `next` dist-tag. See
+[CHANGELOG.md](./CHANGELOG.md) for the full list.
+
 ## Changes in 0.8.0
 
 0.8.0 repairs tenant authentication, approval/input integrity,

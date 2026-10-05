@@ -73,14 +73,14 @@ Verify that the Git worktree is clean and that the release commit and tag are
 on the default branch. Push the matching version tag:
 
 ```bash
-git tag v0.8.0
-git push origin v0.8.0
+git tag v0.9.0
+git push origin v0.9.0
 ```
 
 The `publish.yml` workflow verifies the tag, package versions, security audit,
 application, SDK tarball, and examples before invoking `npm publish`. npm
 trusted publishing automatically records provenance for a public package from
-a public repository. Do not publish 0.8.0 until the 0.8.0 release commit is on
+a public repository. Do not publish 0.9.0 until the 0.9.0 release commit is on
 the default branch; a registry version can never be reused.
 
 ## 6. Deploy the optional site
