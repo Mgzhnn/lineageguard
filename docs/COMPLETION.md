@@ -41,7 +41,7 @@ and `pnpm verify` is green.
       eventually be deleted. The upstream merge is not required for completion;
       opening the PR is.
       *Check:* link to the upstream PR recorded in `CHANGELOG.md`.
-- [ ] **2.4** Bump `react`, `react-dom`, `@types/react`, `@types/react-dom`
+- [x] **2.4** Bump `react`, `react-dom`, `@types/react`, `@types/react-dom`
       together to 19.3.
       *Check:* `pnpm verify` is green.
 

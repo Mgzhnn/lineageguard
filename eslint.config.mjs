@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Local agent worktrees carry their own builds.
     ".claude/**",
+    // Generated SDK declarations and the site build are not source.
+    "sdk/dist/**",
+    "dist/**",
   ]),
 ]);
 
