@@ -110,11 +110,13 @@ export function normalizeBlockingThreshold(
   return normalized;
 }
 
-export function normalizeRules(rules: readonly CustomLineageRule[] = []) {
+export function normalizeRules(
+  rules: readonly CustomLineageRule[] = [],
+): CustomLineageRule[] {
   if (!Array.isArray(rules)) {
     throw new Error("Custom rules must be an array.");
   }
-  const normalized = [...rules];
+  const normalized: CustomLineageRule[] = [...rules];
   const ids = new Set<string>();
   normalized.forEach((rule) => {
     if (
