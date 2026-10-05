@@ -106,7 +106,7 @@ test("exposes a deployment health contract", async () => {
   const payload = await response.json();
   assert.equal(payload.status, "ok");
   assert.equal(payload.product, "LineageGuard");
-  assert.equal(payload.version, "0.7.0");
+  assert.equal(payload.version, "0.8.0");
   assert.equal(payload.paidApiRequired, false);
   assert.ok(payload.capabilities.includes("recovery-packet"));
   assert.ok(payload.capabilities.includes("pre-tool-gate"));

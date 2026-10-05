@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-Security fixes are applied to the latest released minor version. Before a
-public npm release exists, use the latest commit on `main`.
+Security fixes are applied to the latest released minor version, currently
+0.8.x. Earlier versions, including 0.7.0, do not receive fixes.
 
 ## Reporting a vulnerability
 
