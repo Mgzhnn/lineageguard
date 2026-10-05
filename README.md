@@ -418,7 +418,8 @@ the required Webpack peer explicitly, allowlists only the three required native
 build packages, explicitly disables unused Sharp installation, and commits the
 regenerated lockfile. A fresh
 `pnpm install --frozen-lockfile` is therefore the supported installation path.
-See [docs/releasing.md](./docs/releasing.md) for maintainer release steps.
+See [docs/releasing.md](./docs/releasing.md) for maintainer release steps and
+[docs/COMPLETION.md](./docs/COMPLETION.md) for the closed definition of done.
 
 ## Deployment contract
 
