@@ -557,6 +557,80 @@ test("does not read the month May, an imperative never, or a tense change as dri
   }
 });
 
+test("only counts a completed action against the guardrail when the subject is agentive or the object is protected", () => {
+  const guardrail = "Draft only. Do not send anything to the customer without approval.";
+  const run = (from: string, to: string, label = "Agent") =>
+    analyzeLineage(
+      [
+        { id: "source", label: "Source", text: from },
+        { id: "agent", label, text: to },
+      ],
+      guardrail,
+    );
+  const guardrailIssues = (text: string, from = "Prepare the reply draft.", label?: string) =>
+    run(from, text, label).issues.filter((issue) => issue.type === "guardrail");
+
+  // A third party acting, and a gated internal handoff, are not violations.
+  assert.equal(guardrailIssues("The customer sent us a complaint.").length, 0);
+  assert.equal(guardrailIssues("The draft was shared with the reviewer for approval.").length, 0);
+  assert.equal(guardrailIssues("The customer complained and sent us a screenshot.").length, 0);
+
+  // The agent reporting its own action stays high.
+  for (const text of [
+    "I sent the email.",
+    "We published the post.",
+    "The agent deployed the change.",
+    "I reviewed the draft and sent it to the customer.",
+    "Sent the reply to the customer.",
+    "The reply was sent to the customer.",
+  ]) {
+    const issues = guardrailIssues(text);
+    assert.equal(issues.length, 1, text);
+    assert.equal(issues[0].severity, "high", text);
+  }
+  // The stage label is an agentive subject too.
+  assert.equal(guardrailIssues("Email agent sent the reply.", "Prepare the reply draft.", "Email agent").length, 1);
+  // A passive completion of the very action the guardrail names is still the agent's.
+  const passive = analyzeLineage(
+    [
+      { id: "source", label: "Source", text: "Prepare the release note." },
+      { id: "agent", label: "Agent", text: "The release note was published." },
+    ],
+    "Do not publish without human approval.",
+  );
+  assert.equal(passive.issues.filter((issue) => issue.type === "guardrail").length, 1);
+});
+
+test("reports Latin-script non-English stages as outside coverage", () => {
+  for (const [from, to] of [
+    ["The result has not been confirmed.", "Das Ergebnis ist nicht bestätigt worden."],
+    ["The result has not been confirmed.", "El resultado no ha sido confirmado por el equipo."],
+  ]) {
+    const result = analyzeLineage([
+      { id: "source", label: "Source", text: from },
+      { id: "agent", label: "Agent", text: to },
+    ]);
+    const coverage = result.issues.find((issue) => issue.type === "coverage");
+    assert.ok(coverage, to);
+    assert.equal(coverage.severity, "low");
+    assert.equal(coverage.toLabel, "Agent");
+  }
+
+  // Short fragments and terse English stay clean.
+  for (const [from, to] of [
+    ["Change: -5%.", "Change: 5 percent."],
+    ["Draft only; manager approval is required before sending.", "Draft only: manager approval remains required before sending."],
+    ["Some customers may qualify.", "Some customers may qualify after review."],
+    ["Dose: 500–1000mg.", "Dose: 0.5–1g."],
+  ]) {
+    const result = analyzeLineage([
+      { id: "source", label: "Source", text: from },
+      { id: "agent", label: "Agent", text: to },
+    ]);
+    assert.equal(result.issues.some((issue) => issue.type === "coverage"), false, to);
+  }
+});
+
 test("canonicalizes between-ranges, currency words, hyphenated word numbers and bare decimals", () => {
   for (const [before, after] of [
     ["Growth was between 12% and 18%.", "Growth was 12–18%."],
