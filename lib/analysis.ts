@@ -599,7 +599,130 @@ function extractNegations(text: string) {
   );
 }
 
-function extractCompletedActions(text: string) {
+// A completed-action verb is only an authority violation when the clause has
+// an agentive subject (the agent reporting on itself) or the verb's object
+// names what the guardrail protects. "The customer sent us a complaint" is a
+// third party acting; "the draft was shared with the reviewer for approval"
+// is a gated internal handoff; "I sent the email" is the violation.
+const agentiveSubjectPattern =
+  /\b(?:i|we|i've|we've|the agent|the assistant|this agent)\b/i;
+// A passive auxiliary just before the verb ("was sent", "has been already
+// sent", "was reviewed and published").
+const passiveAuxiliaryPattern =
+  /\b(?:is|are|was|were|be|been|being|get|gets|got)\b(?:\s+\w+){0,2}\s*$/i;
+const clauseBoundaryPattern = /[.!?;]|\b(?:and|but|however)\b/gi;
+const sentenceBoundaryPattern = /[.!?;]/g;
+// An object that hands the artifact to the gate ("for approval", "pending
+// review") is a request for the gate, not a bypass of it.
+const gatedObjectPattern =
+  /\b(?:for|pending|awaiting|subject to)\s+(?:(?:further|final|human|manager|internal|a|an|the|your|their)\s+){0,2}(?:approval|review|sign-off|signoff|confirmation|verification)\b/i;
+// Guardrail words that describe the gate rather than the protected target.
+const gateWords = new Set([
+  "approval",
+  "approve",
+  "approved",
+  "approves",
+  "review",
+  "reviewed",
+  "human",
+  "only",
+  "not",
+  "never",
+  "without",
+  "before",
+  "until",
+]);
+const completedActionLemmas: Record<string, string> = {
+  sent: "send",
+  emailed: "email",
+  contacted: "contact",
+  published: "publish",
+  posted: "post",
+  deleted: "delete",
+  purchased: "purchase",
+  bought: "buy",
+  booked: "book",
+  deployed: "deploy",
+  executed: "execute",
+  transferred: "transfer",
+  submitted: "submit",
+  released: "release",
+  shared: "share",
+};
+
+type CompletedActionContext = {
+  importantWords: string[];
+  label: string;
+};
+
+function clauseAround(
+  text: string,
+  index: number,
+  length: number,
+  boundary: RegExp,
+) {
+  let start = 0;
+  let end = text.length;
+  for (const match of text.matchAll(boundary)) {
+    const matchIndex = match.index ?? 0;
+    if (matchIndex + match[0].length <= index) {
+      start = matchIndex + match[0].length;
+    } else if (matchIndex >= index + length) {
+      end = matchIndex;
+      break;
+    }
+  }
+  return { start, end };
+}
+
+function isAgentiveCompletedAction(
+  normalized: string,
+  verbIndex: number,
+  verb: string,
+  context: CompletedActionContext,
+) {
+  const clause = clauseAround(normalized, verbIndex, verb.length, clauseBoundaryPattern);
+  const sentence = clauseAround(normalized, verbIndex, verb.length, sentenceBoundaryPattern);
+  const subject = normalized.slice(clause.start, verbIndex).trim();
+  const object = normalized.slice(verbIndex + verb.length, clause.end).trim();
+  if (gatedObjectPattern.test(object)) return false;
+
+  const label = normalize(context.label);
+  const hasAgentSubject = (span: string) =>
+    agentiveSubjectPattern.test(span) ||
+    (label.length >= 2 && !stopWords.has(label) && findTermIndex(span, label) >= 0);
+  if (subject) {
+    if (hasAgentSubject(subject)) return true;
+  } else {
+    // The verb opens its clause: a coordinated verb inherits the sentence
+    // subject ("I reviewed it and sent it"), and a bare fragment ("Sent the
+    // email.", "Published.") is the agent reporting on itself.
+    const sentenceSubject = normalized.slice(sentence.start, verbIndex).trim();
+    if (!sentenceSubject || hasAgentSubject(sentenceSubject)) return true;
+  }
+
+  const objectWords = importantGuardrailWords(object).filter(
+    (word) => !gateWords.has(word),
+  );
+  if (objectWords.some((word) => context.importantWords.includes(word))) {
+    return true;
+  }
+
+  // A passive completion whose verb the guardrail itself names ("Do not
+  // publish" / "the note was published") is the agent's own action.
+  if (passiveAuxiliaryPattern.test(subject || normalized.slice(sentence.start, verbIndex))) {
+    const lemma = completedActionLemmas[verb] ?? verb;
+    return context.importantWords.some(
+      (word) => !gateWords.has(word) && word.startsWith(lemma),
+    );
+  }
+  return false;
+}
+
+function extractCompletedActions(
+  text: string,
+  context?: CompletedActionContext,
+) {
   const normalized = normalize(text);
   return unique(
     [...normalized.matchAll(completedActionPattern)]
@@ -618,6 +741,16 @@ function extractCompletedActions(text: string) {
       const interveningWords = between.trim().split(/\s+/).filter(Boolean);
       return interveningWords.length > 3;
     })
+      .filter(
+        (match) =>
+          !context ||
+          isAgentiveCompletedAction(
+            normalized,
+            match.index ?? 0,
+            match[0],
+            context,
+          ),
+      )
       .map((match) => match[0]),
   );
 }
@@ -992,7 +1125,10 @@ function analyzeGuardrail(
     const previous = stages[stageIndex - 1];
     const currentNormalized = normalize(current.text);
     const previousNormalized = normalize(previous.text);
-    const completedActions = extractCompletedActions(current.text);
+    const completedActions = extractCompletedActions(current.text, {
+      importantWords,
+      label: current.label,
+    });
     const retainedWords = importantWords.filter(
       (word) => findTermIndex(currentNormalized, word) >= 0,
     );
@@ -1054,8 +1190,23 @@ function analyzeGuardrail(
 // another script must never be reported as "clean" in deterministic mode,
 // because a clean result there is silence, not safety.
 const coveredScriptPattern = /[a-zÀ-ɏ]/i;
-const MIN_LETTERS_FOR_COVERAGE_CHECK = 20;
+const MIN_LETTERS_FOR_COVERAGE_CHECK = 8;
 const MIN_COVERED_LETTER_RATIO = 0.3;
+// Latin-script text that is not English (German, Spanish, ...) passes the
+// script test, so it is also checked for English function words. Words that
+// are common in other Latin-script languages too (will, has, no, so, also, as,
+// do) are deliberately left out; the ratio is a signal, not a classifier.
+const englishFunctionWords = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "in", "is", "are", "was", "were",
+  "it", "that", "this", "with", "for", "on", "not", "be", "by", "at", "from",
+  "but", "if", "than", "then", "there", "these", "those", "they", "we", "you",
+  "our", "their", "its", "have", "had", "been", "may", "might", "should",
+  "would", "could", "can", "only", "before", "after", "until", "while", "when",
+  "where", "which", "who", "into", "over", "about", "any", "each", "some",
+  "more", "both", "such", "very", "yet", "just", "now",
+]);
+const MIN_WORDS_FOR_FUNCTION_WORD_CHECK = 6;
+const MIN_ENGLISH_FUNCTION_WORD_RATIO = 0.08;
 
 function analyzeCoverage(stages: TraceStage[]): LineageIssue[] {
   if (stages.length < 2) return [];
@@ -1067,6 +1218,15 @@ function analyzeCoverage(stages: TraceStage[]): LineageIssue[] {
       coveredScriptPattern.test(letter),
     ).length;
     if (covered / letters.length < MIN_COVERED_LETTER_RATIO) {
+      uncoveredStageIndexes.push(index);
+      return;
+    }
+    const words = normalize(stage.text).match(/\p{L}[\p{L}']*/gu) ?? [];
+    if (words.length < MIN_WORDS_FOR_FUNCTION_WORD_CHECK) return;
+    const functionWords = words.filter((word) =>
+      englishFunctionWords.has(word),
+    ).length;
+    if (functionWords / words.length < MIN_ENGLISH_FUNCTION_WORD_RATIO) {
       uncoveredStageIndexes.push(index);
     }
   });
@@ -1084,7 +1244,7 @@ function analyzeCoverage(stages: TraceStage[]): LineageIssue[] {
       stages[transitionIndex],
       stages[transitionIndex + 1],
       "Language outside detector coverage",
-      `The built-in meaning and authority rules currently cover English, but these stages are mostly written in another script: ${labels}. Numeric evidence checks still apply, but a quiet deterministic result here is not evidence of safety. Use semantic mode, review the handoffs manually, or add a domain rule.`,
+      `The built-in meaning and authority rules currently cover English, but these stages are mostly written in another script or language: ${labels}. Numeric evidence checks still apply, but a quiet deterministic result here is not evidence of safety. Use semantic mode, review the handoffs manually, or add a domain rule.`,
       [],
       [],
     ),

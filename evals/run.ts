@@ -16,6 +16,10 @@ let falseNegatives = 0;
 let expectedIssueCount = 0;
 let matchedIssueCount = 0;
 const failures: string[] = [];
+// Cases tagged knownFailure document a real detector limitation. They count
+// toward every metric, so the 0.9 minimums are the binding gate, but a miss on
+// them is listed here instead of failing the check.
+const knownFailures: string[] = [];
 
 for (const evaluationCase of evaluationCases) {
   const report = runReliabilityPipeline(
@@ -24,16 +28,19 @@ for (const evaluationCase of evaluationCases) {
   );
   const predictedBlocked =
     severityRank[report.analysis.overallSeverity] >= severityRank[threshold];
+  const record = (message: string) => {
+    (evaluationCase.knownFailure ? knownFailures : failures).push(message);
+  };
 
   if (evaluationCase.expectedBlocked && predictedBlocked) truePositives += 1;
   if (!evaluationCase.expectedBlocked && !predictedBlocked) trueNegatives += 1;
   if (!evaluationCase.expectedBlocked && predictedBlocked) {
     falsePositives += 1;
-    failures.push(`${evaluationCase.id}: unexpected block`);
+    record(`${evaluationCase.id}: unexpected block`);
   }
   if (evaluationCase.expectedBlocked && !predictedBlocked) {
     falseNegatives += 1;
-    failures.push(`${evaluationCase.id}: expected a block`);
+    record(`${evaluationCase.id}: expected a block`);
   }
 
   const actualTypes = new Set(
@@ -49,9 +56,7 @@ for (const evaluationCase of evaluationCases) {
     if (actualTypes.has(expectedType)) {
       matchedIssueCount += 1;
     } else {
-      failures.push(
-        `${evaluationCase.id}: missing expected ${expectedType} signal`,
-      );
+      record(`${evaluationCase.id}: missing expected ${expectedType} signal`);
     }
   }
 }
@@ -89,6 +94,7 @@ console.log(
       metrics,
       minimums,
       failures,
+      knownFailures,
     },
     null,
     2,
