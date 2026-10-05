@@ -3,6 +3,10 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+const packageVersion = JSON.parse(
+  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+).version;
+
 // Production route fixtures authenticate explicitly; loopback Host is not identity.
 process.env.LINEAGEGUARD_API_KEYS_JSON = '{"render-fixture":"synthetic-render-secret"}';
 
@@ -128,7 +132,7 @@ test("exposes a deployment health contract", async () => {
   const payload = await response.json();
   assert.equal(payload.status, "ok");
   assert.equal(payload.product, "LineageGuard");
-  assert.equal(payload.version, "0.8.0");
+  assert.equal(payload.version, packageVersion);
   assert.equal(payload.paidApiRequired, false);
   assert.ok(payload.capabilities.includes("recovery-packet"));
   assert.ok(payload.capabilities.includes("pre-tool-gate"));

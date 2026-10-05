@@ -247,8 +247,12 @@ latency, cost, variability, and failure modes.
 Judge findings are merged into the report as inspectable meaning-family
 issues and persist through snapshots. If the judge itself fails, the handoff
 fails closed by default (`semanticJudgeFailureMode: "warn"` downgrades that to
-a visible low-severity note). The core stays dependency-free: no judge, no
-model call. Run the executable demo with `pnpm demo:semantic`.
+a visible low-severity note). The judge is raced against
+`semanticJudgeTimeoutMs` (default 30 000 ms) and receives an `AbortSignal`; a
+timeout follows `semanticJudgeFailureMode`. Handoffs over the trace limits (50
+stages, 500 000 characters per stage, 1.5 M in total) are blocked, not thrown.
+The core stays dependency-free: no judge, no model call. Run the executable
+demo with `pnpm demo:semantic`.
 
 Existing orchestration loops should call `await guard.inspectHandoffAsync(...)`
 to include the semantic judge. The synchronous `inspectHandoff(...)` method is
