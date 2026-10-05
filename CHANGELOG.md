@@ -22,7 +22,8 @@ All notable changes to LineageGuard are documented here.
   pressed state on example buttons, review buttons disabled on stale
   reports, and friendly JSON errors. Health endpoint sends no-store and
   nosniff headers and advertises `per-isolate-rate-limit`.
-- Dependencies and release: bump `vinext` to 1.0.1 with a regenerated patch
+- Dependencies and release: bump `react`, `react-dom`, `@types/react` and
+  `@types/react-dom` together to 19.3.0; bump `vinext` to 1.0.1 with a regenerated patch
   keyed `vinext@1.0.1` (upstream-ready diff in
   `docs/audit-evidence/vinext-path-sep.patch`); the patch-guard test asserts
   the module source so it fails on Linux; `verify-release-tag` requires a
