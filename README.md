@@ -392,18 +392,26 @@ pnpm build
 pnpm test:render
 ```
 
-The current `curated-regression-v2` set contains 54 deliberately small
-positive and negative English cases, including equivalence rewrites that must
-stay clean (contractions, `between X and Y`, currency words, the month May) and
-structural mutations that must block (including a hedge, quantifier or
-negation that is silently dropped from a restated claim):
+The current `curated-regression-v2` set contains 77 cases at the medium
+threshold: 54 deliberately small positive and negative English cases, including
+equivalence rewrites that must stay clean (contractions, `between X and Y`,
+currency words, the month May) and structural mutations that must block
+(including a hedge, quantifier or negation that is silently dropped from a
+restated claim); 3 authority-precision cases (a third-party subject and a gated
+passive stay clean, "I sent the email" blocks); and 20 independent multi-stage
+handoffs (`indep-*`, research → writer → editor → publisher) that are not
+unit-test fixtures. Two independent cases are tagged `knownFailure` and document
+real limitations (a scheduling date added by the publisher, and "nothing has
+been sent" not read as a negation); they count toward the metrics but do not
+fail the gate, which is the 0.9 minimums below.
 
 | Metric | Result |
 | --- | --- |
-| Precision | 100% |
+| Precision | 94.7% |
 | Recall | 100% |
-| Specificity | 100% |
+| Specificity | 95.1% |
 | Expected-signal coverage | 100% |
+| False-positive rate | 4.9% |
 | False-positive rate | 0% |
 
 These are regression-set results at the medium threshold, **not** a claim
