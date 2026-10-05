@@ -4,6 +4,30 @@ All notable changes to LineageGuard are documented here.
 
 ## Unreleased
 
+- SDK: add `semanticJudgeTimeoutMs` (default 30 s) and
+  `SemanticJudgeContext.signal`; return a blocked decision instead of throwing
+  for handoffs beyond `TRACE_LIMITS`; call event sinks before state is
+  committed; leave no idempotency record when a tool throws so retries
+  re-invoke it; ignore non-text OTLP parts and keep JSON-shaped answers
+  verbatim; export `TracePayloadError`, `TRACE_LIMITS`,
+  `PersistedToolExecution` and `PersistedHandoffRequest`; split
+  `sdk/runtime.ts` into `sdk/runtime/*`.
+- Detector: count a completed action as an authority violation only with an
+  agentive subject, a guardrail-word object or a guardrail-named passive;
+  report Latin-script text in another language as outside coverage; add 20
+  independent multi-stage evaluation cases and a `knownFailure` tag so the
+  0.9 minimums are the binding gate (77 cases).
+- Workspace: paste-JSON import sharing the file path's parser and 2 MB
+  check, a clear message for schema 1.1 payloads, a scoped live region,
+  pressed state on example buttons, review buttons disabled on stale
+  reports, and friendly JSON errors. Health endpoint sends no-store and
+  nosniff headers and advertises `per-isolate-rate-limit`.
+- Dependencies and release: bump `vinext` to 1.0.1 with a regenerated patch
+  keyed `vinext@1.0.1` (upstream-ready diff in
+  `docs/audit-evidence/vinext-path-sep.patch`); the patch-guard test asserts
+  the module source so it fails on Linux; `verify-release-tag` requires a
+  `## <version>` changelog heading; the tarball and rendered-HTML tests read
+  the version from the package files.
 - Detect a hedge, limiting quantifier or `n't` contraction that is silently
   dropped from a restated claim; stop reading contractions, the month May, an
   imperative "never", "the most important" and reporting-verb tense changes as

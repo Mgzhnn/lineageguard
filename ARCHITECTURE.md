@@ -159,6 +159,11 @@ recovery state, event sequence, and execution idempotency records without
 storing raw approval tokens. Restore also requires exact custom-rule ID parity,
 preventing a resumed session from silently changing its detector policy.
 
+`sdk/runtime.ts` is a barrel. The session lives in `sdk/runtime/session.ts`,
+with `types.ts`, `snapshot.ts` (option, stage and snapshot validation),
+`tool-gate.ts` (the registered-tool boundary) and `semantic-judge.ts` (judge
+timeout and replay rule).
+
 ## Trust boundaries
 
 - Imported files and API bodies are capped at 2,000,000 bytes.
