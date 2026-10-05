@@ -1,7 +1,8 @@
+import { json } from "@/lib/api-response";
 import { PRODUCT_VERSION } from "@/lib/version";
 
 export async function GET() {
-  return Response.json({
+  return json({
     status: "ok",
     product: "LineageGuard",
     version: PRODUCT_VERSION,
@@ -30,7 +31,7 @@ export async function GET() {
       "handoff-gate",
       "stateless-evaluate-api",
       "tenant-authenticated-api",
-      "per-tenant-rate-limit",
+      "per-isolate-rate-limit",
     ],
   });
 }
