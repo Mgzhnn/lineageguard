@@ -89,7 +89,7 @@ The detector uses three inspectable rule families:
 | Family | Protects | Current signals |
 | --- | --- | --- |
 | Evidence | factual structure | numbers, ranges, money, dates, quantities, written-out numbers |
-| Meaning | semantic boundaries | English certainty, quantifiers, and negation; optional dynamic judge |
+| Meaning | semantic boundaries | English certainty, quantifiers, and negation, including a hedge or limiting quantifier dropped from a restated claim; optional dynamic judge |
 | Authority | permissions | English protected instructions and action verbs |
 
 Evidence signals canonicalize before comparison: currency magnitudes ($5k →

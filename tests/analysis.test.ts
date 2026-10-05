@@ -496,3 +496,83 @@ test("rejects duplicate custom rules and malformed findings", () => {
     /invalid finding/i,
   );
 });
+
+test("treats n't contractions as negations and not as new certainty", () => {
+  const dropped = analyzeLineage([
+    { id: "source", label: "Source", text: "The result hasn't been confirmed." },
+    { id: "agent", label: "Agent", text: "The result has been confirmed." },
+  ]);
+  assert.equal(dropped.overallSeverity, "high");
+  assert.ok(dropped.issues.some((issue) => issue.type === "negation"));
+
+  const contracted = analyzeLineage([
+    { id: "source", label: "Source", text: "The result has not been confirmed." },
+    { id: "agent", label: "Agent", text: "The result hasn't been confirmed." },
+  ]);
+  assert.equal(contracted.overallSeverity, "clean");
+});
+
+test("flags a hedge or limiting quantifier that is silently dropped", () => {
+  const hedge = analyzeLineage([
+    { id: "source", label: "Source", text: "The treatment may reduce symptoms by 12–18%." },
+    { id: "agent", label: "Agent", text: "The treatment reduces symptoms by 12–18%." },
+  ]);
+  assert.equal(hedge.overallSeverity, "medium");
+  assert.ok(hedge.issues.some((issue) => issue.type === "certainty"));
+
+  const quantifier = analyzeLineage([
+    { id: "source", label: "Source", text: "Some users reported the login issue." },
+    { id: "agent", label: "Agent", text: "Users reported the login issue." },
+  ]);
+  assert.equal(quantifier.overallSeverity, "medium");
+  assert.ok(quantifier.issues.some((issue) => issue.type === "quantifier"));
+
+  // Moving on to different content is not a dropped qualifier.
+  const unrelated = analyzeLineage([
+    { id: "source", label: "Source", text: "The treatment may reduce symptoms by 12–18%." },
+    { id: "agent", label: "Agent", text: "Drafted the cover note for the reviewer." },
+  ]);
+  assert.equal(unrelated.issues.some((issue) => issue.type === "certainty"), false);
+
+  // A surviving verification requirement keeps the qualification.
+  const verification = analyzeLineage([
+    { id: "source", label: "Source", text: "The estimate is pending verification." },
+    { id: "agent", label: "Agent", text: "The estimate still requires verification." },
+  ]);
+  assert.equal(verification.overallSeverity, "clean");
+});
+
+test("does not read the month May, an imperative never, or a tense change as drift", () => {
+  for (const [before, after] of [
+    ["The report will be published May 24, 2026.", "The report will be published on 2026-05-24."],
+    ["Do not send the email without approval.", "Never send the email without approval."],
+    ["The study showed a 6% gain.", "The study shows a 6% gain."],
+    ["The key factor is cost.", "The most important factor is cost."],
+  ]) {
+    const result = analyzeLineage([
+      { id: "source", label: "Source", text: before },
+      { id: "agent", label: "Agent", text: after },
+    ]);
+    assert.equal(result.overallSeverity, "clean", `${before} -> ${after}`);
+  }
+});
+
+test("canonicalizes between-ranges, currency words, hyphenated word numbers and bare decimals", () => {
+  for (const [before, after] of [
+    ["Growth was between 12% and 18%.", "Growth was 12–18%."],
+    ["The fee is $5,000.", "The fee is 5,000 dollars."],
+    ["Reply within five days.", "Reply within a five-day window."],
+    ["Dose: 0.5g.", "Dose: .5g."],
+  ]) {
+    const result = analyzeLineage([
+      { id: "source", label: "Source", text: before },
+      { id: "agent", label: "Agent", text: after },
+    ]);
+    assert.equal(result.issues.some((issue) => issue.type === "number"), false, `${before} -> ${after}`);
+  }
+  const changed = analyzeLineage([
+    { id: "source", label: "Source", text: "The fee is 5,000 dollars." },
+    { id: "agent", label: "Agent", text: "The fee is 6,000 dollars." },
+  ]);
+  assert.ok(changed.issues.some((issue) => issue.type === "number"));
+});

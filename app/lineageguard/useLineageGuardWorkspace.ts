@@ -210,7 +210,7 @@ export function useLineageGuardWorkspace() {
   }
 
   function addStage() {
-    if (stages.length >= 7) return;
+    if (stages.length >= TRACE_LIMITS.stages) return;
     markEdited();
     setStages((current) => [
       ...current,

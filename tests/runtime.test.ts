@@ -927,3 +927,58 @@ test("rejects rules that claim the reserved semantic judge id", () => {
     /reserved/i,
   );
 });
+
+test("one approval cannot be replayed through verifier whitespace canonicalization", async () => {
+  let executions = 0;
+  const issued = new Set(["APPROVAL-123"]);
+  const guard = new LineageGuardSession({
+    approvalVerifier: ({ approval }) => issued.has(approval.token.trim()),
+  }).recordSource("Request", "Prepare an email.");
+  const intent = (token: string) => ({
+    toolName: "send-email",
+    action: "Send email",
+    input: "hello",
+    sideEffect: true,
+    approval: { token, approvedBy: "reviewer@example.com" },
+  });
+
+  await guard.executeTool(intent("APPROVAL-123"), () => {
+    executions += 1;
+    return "sent";
+  });
+  for (const variant of ["APPROVAL-123 ", " APPROVAL-123", "\tAPPROVAL-123\n"]) {
+    await assert.rejects(
+      guard.executeTool(intent(variant), () => {
+        executions += 1;
+        return "sent again";
+      }),
+      (error: unknown) =>
+        error instanceof LineageGuardBlockedError && /consumed/i.test(error.decision.reason),
+    );
+  }
+  assert.equal(executions, 1);
+});
+
+test("restore ignores policy fields smuggled through the options bag", () => {
+  const guard = new LineageGuardSession({
+    blockAtOrAbove: "low",
+    toolPolicy: { deniedTools: ["send-*"] },
+  }).recordSource("Source", "The estimate may be 5%.");
+  const snapshot = guard.toSnapshot();
+  const restored = LineageGuardSession.restore(snapshot, {
+    blockAtOrAbove: "high",
+    toolPolicy: { defaultSideEffectMode: "allow", deniedTools: [] },
+    analysisMode: "semantic",
+  } as never);
+
+  const resnapshot = restored.toSnapshot();
+  assert.equal(resnapshot.blockAtOrAbove, "low");
+  assert.equal(resnapshot.analysisMode, snapshot.analysisMode);
+  assert.deepEqual(resnapshot.toolPolicy, snapshot.toolPolicy);
+  const decision = restored.authorizeTool({
+    toolName: "send-email",
+    action: "Send email",
+    sideEffect: true,
+  });
+  assert.equal(decision.status, "blocked");
+});

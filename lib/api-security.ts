@@ -81,6 +81,8 @@ function equalSecret(left: string, right: string) {
   return difference === 0;
 }
 
+const workspaceIdentityPattern = /^[^\s@,;<>"']{1,254}@[^\s@,;<>"']{1,254}$/;
+
 function readBearerToken(request: Request) {
   const authorization = request.headers.get("authorization")?.trim() ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(authorization);
@@ -98,6 +100,17 @@ function authenticateTenant(request: Request):
     workspaceUser &&
     process.env.LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY === "true"
   ) {
+    // The platform owns this header, but the tenant id derived from it keys
+    // the rate limiter and appears in logs. Only a single plain address is
+    // accepted: a comma (as produced by header appending) or whitespace would
+    // let one caller mint fresh tenants at will.
+    if (!workspaceIdentityPattern.test(workspaceUser)) {
+      return {
+        ok: false,
+        status: 401,
+        error: "Workspace identity header is malformed.",
+      };
+    }
     return { ok: true, tenantId: `workspace:${workspaceUser}` };
   }
 

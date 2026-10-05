@@ -106,11 +106,9 @@ export async function POST(request: Request) {
     const body = await readRequestText(request);
     const input: unknown = JSON.parse(body);
     const threshold = parseThreshold(input);
-    if (
-      isRecord(input) &&
-      input.schemaVersion === "1.1" &&
-      Array.isArray(input.nodes)
-    ) {
+    // Any 1.1 payload takes the graph path so a malformed one gets the graph
+    // parser's own error instead of the chain parser's schemaVersion complaint.
+    if (isRecord(input) && input.schemaVersion === "1.1") {
       const graph = parseTraceGraphPayload(input);
       const report = runReliabilityGraphPipeline(
         graph.nodes,
