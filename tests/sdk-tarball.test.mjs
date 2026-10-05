@@ -15,6 +15,9 @@ import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const sdkRoot = path.join(repositoryRoot, "sdk");
+const sdkVersion = JSON.parse(
+  await readFile(path.join(sdkRoot, "package.json"), "utf8"),
+).version;
 
 function runPnpm(args, cwd) {
   const pnpmEntrypoint = process.env.npm_execpath;
@@ -98,7 +101,7 @@ test("packs and installs the real SDK tarball in an isolated consumer", async ()
       import { analyzeLineage } from "lineageguard/analysis";
       import { runReliabilityPipeline } from "lineageguard/pipeline";
 
-      assert.equal(PRODUCT_VERSION, "0.8.0");
+      assert.equal(PRODUCT_VERSION, ${JSON.stringify(sdkVersion)});
       assert.equal(typeof LineageGuardRun, "function");
       assert.equal(typeof LineageGuardSession, "function");
       assert.equal(typeof LineageGuardGraphRun, "function");

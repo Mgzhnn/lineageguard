@@ -18,4 +18,16 @@ assert.match(
   "PRODUCT_VERSION must match tag.",
 );
 
-console.log(`Release tag ${tag} matches all package versions.`);
+const changelog = await readFile("CHANGELOG.md", "utf8");
+const hasChangelogHeading = changelog
+  .split(/\r?\n/)
+  .some((line) => line === `## ${expectedVersion}`);
+if (!hasChangelogHeading) {
+  console.error(
+    `CHANGELOG.md has no "## ${expectedVersion}" heading. ` +
+      "Move the Unreleased notes under that heading before tagging.",
+  );
+  process.exit(1);
+}
+
+console.log(`Release tag ${tag} matches all package versions and CHANGELOG.md.`);
