@@ -38,12 +38,11 @@ jobs:
           version: 11.9.0
           run_install: false
 
-      - name: Install Node.js and configure npm
+      - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # Same Node.js as CI so the release is verified on what PRs ran.
           node-version: 22.13.0
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Install locked dependencies
@@ -66,6 +65,20 @@ jobs:
           NODE20="$(mktemp -d)"
           curl -fsSL "https://nodejs.org/dist/v20.20.0/node-v20.20.0-linux-x64.tar.xz" | tar -xJ -C "$NODE20" --strip-components=1
           "$NODE20/bin/node" scripts/smoke-packed-sdk.mjs "${{ runner.temp }}/sdk-pack"
+
+      # npm trusted publishing needs npm 11.5.1+ and Node.js 22.14+, which the
+      # CI floor does not bundle. Verification above already ran on the floor.
+      - name: Install Node.js for publishing and configure npm
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Upgrade npm to a trusted-publishing release
+        run: |
+          npm install -g npm@11
+          npm --version
 
       - name: Publish with npm trusted publishing
         working-directory: sdk
