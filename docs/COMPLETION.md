@@ -14,17 +14,17 @@ and `pnpm verify` is green.
 
 ## 0. Land what is already fixed
 
-- [ ] **0.1** Merge `fix/audit-2026-10-05` into `main` through a pull request
+- [x] **0.1** Merge `fix/audit-2026-10-05` into `main` through a pull request
       with CI green.
       *Check:* `git log --oneline origin/main -1` shows the merge commit.
 
 ## 1. Release safety (GitHub settings, not code)
 
-- [ ] **1.1** Add a required reviewer to the GitHub `npm` environment and
+- [x] **1.1** Add a required reviewer to the GitHub `npm` environment and
       restrict its deployment branches/tags to `v*.*.*`.
       *Check:* the next `v*` workflow run shows a "Waiting for review" state
       before the publish job starts.
-- [ ] **1.2** Protect `main`: require the CI check and one approving review
+- [x] **1.2** Protect `main`: require the CI check and one approving review
       before merge, no force-pushes.
       *Check:* a direct push to `main` is rejected.
 
@@ -166,7 +166,7 @@ and `pnpm verify` is green.
 
 ## 8. Ship
 
-- [ ] **8.1** Move the "Unreleased" changelog section to `## 0.9.0`, bump
+- [x] **8.1** Move the "Unreleased" changelog section to `## 0.9.0`, bump
       `package.json`, `sdk/package.json` and `lib/version.ts` together, tag
       `v0.9.0`, and let the reviewed workflow publish.
       *Check:* `npm view lineageguard version` prints `0.9.0` with provenance,
