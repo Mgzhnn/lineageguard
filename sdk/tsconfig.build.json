@@ -18,6 +18,11 @@
   "include": [
     "./index.ts",
     "./runtime.ts",
+    "./runtime/types.ts",
+    "./runtime/snapshot.ts",
+    "./runtime/tool-gate.ts",
+    "./runtime/semantic-judge.ts",
+    "./runtime/session.ts",
     "./graph.ts",
     "./otel.ts",
     "../lib/analysis.ts",

@@ -36,3 +36,27 @@ test("package export targets exist after compilation", async () => {
     targets.map((target) => access(new URL(target.replace("./", ""), packageRoot))),
   );
 });
+
+test("exports the trace contract and persisted record names from the built package", async () => {
+  const sdk = await import(new URL("dist/sdk/index.js", packageRoot));
+  assert.equal(typeof sdk.TracePayloadError, "function");
+  assert.equal(sdk.TRACE_LIMITS.stages, 50);
+  assert.equal(sdk.TRACE_LIMITS.stageTextCharacters, 500_000);
+
+  const declarations = await readFile(
+    new URL("dist/sdk/index.d.ts", packageRoot),
+    "utf8",
+  );
+  for (const name of [
+    "TracePayloadError",
+    "TRACE_LIMITS",
+    "PersistedToolExecution",
+    "PersistedHandoffRequest",
+  ]) {
+    assert.match(
+      declarations,
+      new RegExp(`\\b${name}\\b`),
+      `${name} must be exported from the package entry point`,
+    );
+  }
+});

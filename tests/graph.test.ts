@@ -253,3 +253,33 @@ test("bounds the pairwise work a dense graph can demand", () => {
   // comparing 700k characters each (4.2M) is past the 3M comparison budget.
   assert.throws(() => runReliabilityGraphPipeline(wide), /comparisons must total/);
 });
+
+test("LineageGuardGraphRun.fromPayload rebuilds a 1.1 graph payload with options", () => {
+  const run = LineageGuardGraphRun.fromPayload(
+    {
+      schemaVersion: "1.1",
+      runName: "Imported graph",
+      guardrail: "Do not publish without human approval.",
+      nodes: graphNodes.map((node) => ({
+        ...node,
+        parentIds: [...node.parentIds],
+        inheritedClaims:
+          "inheritedClaims" in node ? { ...node.inheritedClaims } : undefined,
+      })),
+    },
+    { blockAtOrAbove: "high" },
+  );
+
+  const trace = run.toTrace();
+  assert.equal(trace.runName, "Imported graph");
+  assert.equal(trace.guardrail, "Do not publish without human approval.");
+  assert.deepEqual(
+    trace.nodes.map((node) => node.id),
+    graphNodes.map((node) => node.id),
+  );
+  assert.deepEqual(trace.nodes[3].inheritedClaims, graphNodes[3].inheritedClaims);
+  assert.equal(run.finalize().firstBlockingEdgeId, "policy->writer");
+  assert.throws(() =>
+    LineageGuardGraphRun.fromPayload({ schemaVersion: "1.1", nodes: [] }),
+  );
+});

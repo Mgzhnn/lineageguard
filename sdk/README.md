@@ -91,6 +91,19 @@ registered tool client await asynchronous verification and reserve the token
 while it is pending. For an async preflight without execution, use
 `authorizeToolAsync()`.
 
+Idempotency keys deduplicate only completed tool executions. Concurrent calls
+under one key share the in-flight result. If the tool implementation throws
+(or the call is blocked), the execution record is deleted and a retry under
+the same key invokes the tool again. A tool that may partially apply its side
+effect before throwing must therefore be idempotent on the host side.
+
+The semantic judge is raced against `semanticJudgeTimeoutMs` (default 30 000).
+The judge receives an `AbortSignal` in its context; a timeout aborts it and is
+handled like any other judge failure under `semanticJudgeFailureMode`. Handoffs
+beyond the trace limits (50 stages, 500 000 characters per stage, 1.5 million
+total) return a blocked decision that names the limit; nothing is recorded and
+the session is not frozen.
+
 ## Analyze a graph
 
 ```ts

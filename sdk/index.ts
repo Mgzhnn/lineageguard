@@ -115,7 +115,11 @@ export {
   PIPELINE_VERSION,
   PRODUCT_VERSION,
 } from "../lib/version.ts";
-export { parseTracePayload } from "../lib/trace-schema.ts";
+export {
+  parseTracePayload,
+  TRACE_LIMITS,
+  TracePayloadError,
+} from "../lib/trace-schema.ts";
 export {
   parseTraceGraphPayload,
   runReliabilityGraphPipeline,
@@ -171,6 +175,8 @@ export type {
   LineageGuardSessionOptions,
   LineageGuardSessionSnapshot,
   LineageGuardSnapshotStore,
+  PersistedHandoffRequest,
+  PersistedToolExecution,
   RegisteredTool,
   RegisteredToolExecutionOptions,
   RuntimeEvent,
