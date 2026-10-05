@@ -328,8 +328,9 @@ with no credentials configured, any other request is refused with 503. Hosted ac
 an explicitly trusted workspace-authenticated user header
 (`LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY=true` behind a header-sanitizing
 dispatcher) or `LINEAGEGUARD_API_KEYS_JSON` plus `x-lineageguard-tenant` and a
-bearer token. Per-tenant isolate limits are configured with
-`LINEAGEGUARD_RATE_LIMIT_PER_MINUTE`.
+bearer token. `LINEAGEGUARD_RATE_LIMIT_PER_MINUTE` sets a per-isolate
+(per-worker) safety valve, not a quota: each isolate counts requests
+independently, so the effective ceiling scales with the number of workers.
 
 Tool execution should still be wrapped locally in the host process: once an
 opaque framework has already executed a tool, no external monitor can undo it.
