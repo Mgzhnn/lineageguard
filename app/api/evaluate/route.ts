@@ -1,4 +1,5 @@
 import type { Severity } from "@/lib/analysis";
+import { json } from "@/lib/api-response";
 import { authorizeEvaluationRequest } from "@/lib/api-security";
 import {
   parseTraceGraphPayload,
@@ -23,13 +24,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 class RequestPayloadTooLargeError extends Error {}
-
-function json(body: unknown, init: ResponseInit = {}) {
-  const headers = new Headers(init.headers);
-  headers.set("cache-control", "no-store");
-  headers.set("x-content-type-options", "nosniff");
-  return Response.json(body, { ...init, headers });
-}
 
 async function readRequestText(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -106,11 +100,9 @@ export async function POST(request: Request) {
     const body = await readRequestText(request);
     const input: unknown = JSON.parse(body);
     const threshold = parseThreshold(input);
-    if (
-      isRecord(input) &&
-      input.schemaVersion === "1.1" &&
-      Array.isArray(input.nodes)
-    ) {
+    // Any 1.1 payload takes the graph path so a malformed one gets the graph
+    // parser's own error instead of the chain parser's schemaVersion complaint.
+    if (isRecord(input) && input.schemaVersion === "1.1") {
       const graph = parseTraceGraphPayload(input);
       const report = runReliabilityGraphPipeline(
         graph.nodes,

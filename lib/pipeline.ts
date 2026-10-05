@@ -10,7 +10,7 @@ import {
 } from "./analysis.ts";
 import { fingerprintValue } from "./fingerprint.ts";
 import { PIPELINE_VERSION } from "./version.ts";
-import { encodeStageId } from "./trace-schema.ts";
+import { encodeStageId, TracePayloadError } from "./trace-schema.ts";
 
 export type PipelineModuleId =
   | "trace-collector"
@@ -201,11 +201,42 @@ function buildRecoveryPacket(
   };
 }
 
+function validatePipelineInput(
+  stages: TraceStage[],
+  recoveryTransitionIndex: number | null | undefined,
+) {
+  // The schema parsers enforce this for JSON input; direct callers (SDK,
+  // workspace, tests) bypass them, so the engine repeats the cheap checks
+  // whose failure would otherwise surface as a TypeError or a bogus edge id.
+  const seen = new Set<string>();
+  for (const stage of stages) {
+    if (seen.has(stage.id)) {
+      throw new TracePayloadError(`Duplicate stage id "${stage.id}".`);
+    }
+    seen.add(stage.id);
+  }
+  if (
+    recoveryTransitionIndex !== undefined &&
+    recoveryTransitionIndex !== null &&
+    (!Number.isInteger(recoveryTransitionIndex) ||
+      recoveryTransitionIndex < 0 ||
+      recoveryTransitionIndex > stages.length - 2)
+  ) {
+    throw new TracePayloadError(
+      `recoveryTransitionIndex must be null or an integer between 0 and ${Math.max(
+        0,
+        stages.length - 2,
+      )}.`,
+    );
+  }
+}
+
 export function runReliabilityPipeline(
   stages: TraceStage[],
   guardrail = "",
   options: ReliabilityPipelineOptions = {},
 ): ReliabilityPipelineRun {
+  validatePipelineInput(stages, options.recoveryTransitionIndex);
   const analysis = analyzeLineage(stages, guardrail, {
     rules: options.rules,
     includeBuiltInRules: options.includeBuiltInRules,

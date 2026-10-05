@@ -202,3 +202,81 @@ test("validates custom OTLP attribute-key options", () => {
     /options must be an object/i,
   );
 });
+
+test("ignores non-text output parts such as tool calls", () => {
+  const fixture = otlpFixture();
+  const child = fixture.resourceSpans[0].scopeSpans[0].spans[1];
+  child.attributes = [
+    attribute(
+      "gen_ai.output.messages",
+      JSON.stringify([
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool_call",
+              id: "call-1",
+              name: "send_email",
+              arguments: {
+                to: "customer@example.com",
+                body: "The pilot proves all users improve by 18%.",
+              },
+            },
+          ],
+        },
+      ]),
+    ),
+    attribute("lineageguard.agent.name", "Writer"),
+  ];
+
+  const trace = parseOtlpTracePayload(fixture);
+  assert.deepEqual(
+    trace.nodes.map((node) => node.id),
+    [`source-${ROOT_SPAN_ID}`, ROOT_SPAN_ID],
+  );
+  assert.ok(
+    trace.nodes.every(
+      (node) =>
+        !node.text.includes("customer@example.com") &&
+        !node.text.includes("send_email") &&
+        !node.text.includes("proves"),
+    ),
+  );
+});
+
+test("keeps a JSON-shaped assistant answer as raw text", () => {
+  const fixture = otlpFixture();
+  const child = fixture.resourceSpans[0].scopeSpans[0].spans[1];
+  child.attributes[0] = attribute(
+    "gen_ai.output.messages",
+    JSON.stringify([
+      {
+        role: "assistant",
+        parts: [{ type: "text", content: '{"approved": true, "name": "Bob"}' }],
+      },
+    ]),
+  );
+  assert.equal(
+    parseOtlpTracePayload(fixture).nodes[2].text,
+    '{"approved": true, "name": "Bob"}',
+  );
+
+  // A message wrapper is still unwrapped; only its text parts contribute.
+  child.attributes[0] = attribute(
+    "gen_ai.output.messages",
+    JSON.stringify([
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          { type: "reasoning", summary: "private chain of thought" },
+          { type: "output_text", text: "The pilot proves all users improve by 18%." },
+        ],
+      },
+    ]),
+  );
+  assert.equal(
+    parseOtlpTracePayload(fixture).nodes[2].text,
+    "The pilot proves all users improve by 18%.",
+  );
+});

@@ -1,9 +1,25 @@
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+
+const packageVersion = JSON.parse(
+  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 // Production route fixtures authenticate explicitly; loopback Host is not identity.
 process.env.LINEAGEGUARD_API_KEYS_JSON = '{"render-fixture":"synthetic-render-secret"}';
+
+// vinext >= 1.0 imports `cloudflare:workers` from the built Worker for its
+// Workers tracing integration. Node cannot resolve that scheme, so reuse the
+// resolve hook vinext itself registers before importing the bundle in Node.
+const { registerPrerenderCloudflareLoader } = await import(
+  new URL(
+    "../node_modules/vinext/dist/build/prerender-cloudflare-loader.js",
+    import.meta.url,
+  ).href
+);
+registerPrerenderCloudflareLoader();
 
 async function render(pathname = "/", init = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -42,19 +58,29 @@ test("production static cache resolves hashed assets by URL path", async () => {
     "../node_modules/vinext/dist/server/static-file-cache.js",
     import.meta.url,
   );
+  // The lookup below cannot fail on POSIX (path.sep is already "/"), so also
+  // assert the patched line is present in the installed module source. This
+  // is what makes the guard fail on Linux CI when the patch is lost.
+  const cacheModuleSource = await readFile(cacheModuleUrl, "utf8");
+  assert.ok(
+    cacheModuleSource.includes('.split(path.sep).join("/")'),
+    `${path.basename(cacheModuleUrl.pathname)} must contain the patched ` +
+      '`.split(path.sep).join("/")` cache-key normalization (patches/vinext.patch)',
+  );
   const { StaticFileCache } = await import(cacheModuleUrl.href);
   const clientDir = new URL("../dist/client/", import.meta.url);
-  const assetNames = await readdir(new URL("assets/", clientDir));
+  const cssDir = "_next/static/css/";
+  const assetNames = await readdir(new URL(cssDir, clientDir));
   const cssName = assetNames.find((name) => name.endsWith(".css"));
-  assert.ok(cssName, "expected a built CSS asset in dist/client/assets");
+  assert.ok(cssName, `expected a built CSS asset in dist/client/${cssDir}`);
 
   const cache = await StaticFileCache.create(
     decodeURIComponent(clientDir.pathname.replace(/^\/([A-Za-z]:)/, "$1")),
   );
-  const entry = cache.lookup(`/assets/${cssName}`);
+  const entry = cache.lookup(`/${cssDir}${cssName}`);
   assert.ok(
     entry,
-    `static cache must resolve /assets/${cssName} via URL-style lookup`,
+    `static cache must resolve /${cssDir}${cssName} via URL-style lookup`,
   );
 });
 
@@ -106,7 +132,7 @@ test("exposes a deployment health contract", async () => {
   const payload = await response.json();
   assert.equal(payload.status, "ok");
   assert.equal(payload.product, "LineageGuard");
-  assert.equal(payload.version, "0.8.0");
+  assert.equal(payload.version, packageVersion);
   assert.equal(payload.paidApiRequired, false);
   assert.ok(payload.capabilities.includes("recovery-packet"));
   assert.ok(payload.capabilities.includes("pre-tool-gate"));
@@ -246,4 +272,43 @@ test("evaluates a branch-and-merge graph through the HTTP contract", async () =>
   assert.equal(payload.decision, "block");
   assert.equal(payload.blockingEdgeId, "source->merge");
   assert.deepEqual(payload.recovery.contaminatedNodeIds, ["merge"]);
+});
+
+test("health advertises the per-isolate limit with no-store and nosniff", async () => {
+  const response = await render("/api/health");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  const payload = await response.json();
+  assert.ok(payload.capabilities.includes("per-isolate-rate-limit"));
+  assert.ok(!payload.capabilities.includes("per-tenant-rate-limit"));
+});
+
+test("the workspace live region is the one-line status only", async () => {
+  const response = await render();
+  const html = await response.text();
+  const liveRegions = html.match(/aria-live="[^"]*"/g) ?? [];
+  assert.equal(liveRegions.length, 1);
+  assert.match(html, /<div class="verdict-topline" aria-live="polite">/);
+  assert.doesNotMatch(html, /<aside class="report-panel" aria-live=/);
+});
+
+test("the workspace offers a paste-JSON import beside the file picker", async () => {
+  const response = await render();
+  const html = await response.text();
+  assert.match(html, /<label for="paste-trace">Paste trace JSON<\/label>/);
+  assert.match(html, /<textarea id="paste-trace"/);
+  assert.match(html, /Import pasted JSON/);
+  assert.match(html, /Import trace JSON/);
+});
+
+test("example buttons expose their selection with aria-pressed", async () => {
+  const response = await render();
+  const html = await response.text();
+  const exampleButtons = html.match(/<button aria-pressed="(true|false)" class="(selected)?"/g) ?? [];
+  assert.ok(exampleButtons.length >= 2, "expected example buttons with aria-pressed");
+  assert.equal(
+    exampleButtons.filter((button) => button.includes('aria-pressed="true"')).length,
+    1,
+  );
 });

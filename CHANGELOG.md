@@ -2,6 +2,51 @@
 
 All notable changes to LineageGuard are documented here.
 
+## 0.9.0
+
+- SDK: add `semanticJudgeTimeoutMs` (default 30 s) and
+  `SemanticJudgeContext.signal`; return a blocked decision instead of throwing
+  for handoffs beyond `TRACE_LIMITS`; call event sinks before state is
+  committed; leave no idempotency record when a tool throws so retries
+  re-invoke it; ignore non-text OTLP parts and keep JSON-shaped answers
+  verbatim; export `TracePayloadError`, `TRACE_LIMITS`,
+  `PersistedToolExecution` and `PersistedHandoffRequest`; split
+  `sdk/runtime.ts` into `sdk/runtime/*`.
+- Detector: count a completed action as an authority violation only with an
+  agentive subject, a guardrail-word object or a guardrail-named passive;
+  report Latin-script text in another language as outside coverage; add 20
+  independent multi-stage evaluation cases and a `knownFailure` tag so the
+  0.9 minimums are the binding gate (77 cases).
+- Workspace: paste-JSON import sharing the file path's parser and 2 MB
+  check, a clear message for schema 1.1 payloads, a scoped live region,
+  pressed state on example buttons, review buttons disabled on stale
+  reports, and friendly JSON errors. Health endpoint sends no-store and
+  nosniff headers and advertises `per-isolate-rate-limit`.
+- Dependencies and release: bump `vinext` to 1.0.1 with a regenerated patch
+  keyed `vinext@1.0.1` (upstream-ready diff in
+  `docs/audit-evidence/vinext-path-sep.patch`); the patch-guard test asserts
+  the module source so it fails on Linux; `verify-release-tag` requires a
+  `## <version>` changelog heading; the tarball and rendered-HTML tests read
+  the version from the package files.
+- Detect a hedge, limiting quantifier or `n't` contraction that is silently
+  dropped from a restated claim; stop reading contractions, the month May, an
+  imperative "never", "the most important" and reporting-verb tense changes as
+  drift; canonicalize `between X and Y`, currency words, hyphenated word
+  numbers and bare decimals.
+- Fingerprint approval tokens after trimming so a host verifier that trims
+  cannot let one approval execute a side-effect tool repeatedly, and make
+  `restore()` accept only its documented options so a resumed session cannot
+  have its threshold, tool policy or analysis mode replaced.
+- Bound graph evaluation by parent-link count and compared characters so a
+  dense in-limit payload cannot monopolize the API worker; validate duplicate
+  stage ids and the recovery index on the public pipeline entry; reject a
+  malformed workspace identity header; route every 1.1 payload to the graph
+  parser; allow the workspace to build up to 50 stages.
+- Publish only tags that are on `main`, verify releases on the CI Node.js,
+  run the Node.js 20 floor check before publishing, and publish prerelease
+  tags under `next`. Group React packages in Dependabot and stop it from
+  bumping the patched `vinext`.
+
 ## 0.8.0
 
 - Reject inherited object properties as API tenant credentials and use a fixed
@@ -21,7 +66,7 @@ All notable changes to LineageGuard are documented here.
   handle clipboard failures and import races, and use accessible replay buttons.
 - Add adversarial regressions and 12 paired numeric evaluation cases, document
   recovery responsibilities, and execute both README quickstarts from the tarball.
-- Update fast-uri to patched 3.1.6; retain the two documented image-size exceptions.
+- Update fast-uri to patched 3.1.8; retain the two documented image-size exceptions.
 - Add a documented audit exception for the unpatched `braces` denial-of-service
   advisory GHSA-vfj7-8cjw-p6xm, reachable only from development tooling.
 

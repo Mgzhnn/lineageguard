@@ -45,6 +45,19 @@ English; dynamic semantic analysis is available through a host-provided judge.
 | 📡 **OTLP adapter** | Dependency-free OTLP/JSON ingestion for OpenTelemetry GenAI spans |
 | 🔬 **Forensic workspace** | Visual replay UI plus a framework-neutral HTTP/JSON gate |
 
+## Changes in 0.9.0
+
+0.9.0 closes the 2026-10-05 audit and the completion plan in
+[docs/COMPLETION.md](./docs/COMPLETION.md). The detector now catches a hedge,
+quantifier or contraction that is silently dropped and no longer blocks
+contractions, `between X and Y`, currency words, the month May or a tense
+change. Approval tokens are fingerprinted after trimming, `restore()` accepts
+only its documented options, handoffs over the trace limits return a blocked
+decision, the semantic judge has a timeout, and dense graph payloads are
+bounded. The workspace accepts pasted JSON. Releases publish only from `main`
+and prereleases go to the `next` dist-tag. See
+[CHANGELOG.md](./CHANGELOG.md) for the full list.
+
 ## Changes in 0.8.0
 
 0.8.0 repairs tenant authentication, approval/input integrity,
@@ -247,8 +260,12 @@ latency, cost, variability, and failure modes.
 Judge findings are merged into the report as inspectable meaning-family
 issues and persist through snapshots. If the judge itself fails, the handoff
 fails closed by default (`semanticJudgeFailureMode: "warn"` downgrades that to
-a visible low-severity note). The core stays dependency-free: no judge, no
-model call. Run the executable demo with `pnpm demo:semantic`.
+a visible low-severity note). The judge is raced against
+`semanticJudgeTimeoutMs` (default 30 000 ms) and receives an `AbortSignal`; a
+timeout follows `semanticJudgeFailureMode`. Handoffs over the trace limits (50
+stages, 500 000 characters per stage, 1.5 M in total) are blocked, not thrown.
+The core stays dependency-free: no judge, no model call. Run the executable
+demo with `pnpm demo:semantic`.
 
 Existing orchestration loops should call `await guard.inspectHandoffAsync(...)`
 to include the semantic judge. The synchronous `inspectHandoff(...)` method is
@@ -328,8 +345,9 @@ with no credentials configured, any other request is refused with 503. Hosted ac
 an explicitly trusted workspace-authenticated user header
 (`LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY=true` behind a header-sanitizing
 dispatcher) or `LINEAGEGUARD_API_KEYS_JSON` plus `x-lineageguard-tenant` and a
-bearer token. Per-tenant isolate limits are configured with
-`LINEAGEGUARD_RATE_LIMIT_PER_MINUTE`.
+bearer token. `LINEAGEGUARD_RATE_LIMIT_PER_MINUTE` sets a per-isolate
+(per-worker) safety valve, not a quota: each isolate counts requests
+independently, so the effective ceiling scales with the number of workers.
 
 Tool execution should still be wrapped locally in the host process: once an
 opaque framework has already executed a tool, no external monitor can undo it.
@@ -371,10 +389,13 @@ See [docs/trace-contract.md](./docs/trace-contract.md) for validation rules.
 pnpm run verify
 ```
 
-`pnpm run verify` is the same release gate used by GitHub Actions. It performs lint,
-type checks, detector/runtime/OTLP tests, a production build, rendered API
-checks, the curated regression evaluation, the executable demos, and a real
-tarball install in an isolated consumer project.
+`pnpm run verify` is the core of the release gate used by GitHub Actions. It
+performs lint, type checks, detector/runtime/OTLP tests, a production build,
+rendered API checks, the curated regression evaluation, the executable demos,
+and a real tarball install in an isolated consumer project. CI additionally
+runs `pnpm audit:security` and imports the packed SDK on Node.js 20, and the
+publish workflow additionally runs `scripts/verify-release-tag.mjs`, requires
+the tagged commit to be on `main`, and repeats the Node.js 20 import.
 
 Individual commands:
 
@@ -388,16 +409,26 @@ pnpm build
 pnpm test:render
 ```
 
-The current `curated-regression-v2` set contains 45 deliberately small
-positive and negative English cases, including equivalence rewrites that must
-stay clean and structural mutations that must block:
+The current `curated-regression-v2` set contains 77 cases at the medium
+threshold: 54 deliberately small positive and negative English cases, including
+equivalence rewrites that must stay clean (contractions, `between X and Y`,
+currency words, the month May) and structural mutations that must block
+(including a hedge, quantifier or negation that is silently dropped from a
+restated claim); 3 authority-precision cases (a third-party subject and a gated
+passive stay clean, "I sent the email" blocks); and 20 independent multi-stage
+handoffs (`indep-*`, research → writer → editor → publisher) that are not
+unit-test fixtures. Two independent cases are tagged `knownFailure` and document
+real limitations (a scheduling date added by the publisher, and "nothing has
+been sent" not read as a negation); they count toward the metrics but do not
+fail the gate, which is the 0.9 minimums below.
 
 | Metric | Result |
 | --- | --- |
-| Precision | 100% |
+| Precision | 94.7% |
 | Recall | 100% |
-| Specificity | 100% |
+| Specificity | 95.1% |
 | Expected-signal coverage | 100% |
+| False-positive rate | 4.9% |
 | False-positive rate | 0% |
 
 These are regression-set results at the medium threshold, **not** a claim
@@ -416,7 +447,8 @@ the required Webpack peer explicitly, allowlists only the three required native
 build packages, explicitly disables unused Sharp installation, and commits the
 regenerated lockfile. A fresh
 `pnpm install --frozen-lockfile` is therefore the supported installation path.
-See [docs/releasing.md](./docs/releasing.md) for maintainer release steps.
+See [docs/releasing.md](./docs/releasing.md) for maintainer release steps and
+[docs/COMPLETION.md](./docs/COMPLETION.md) for the closed definition of done.
 
 ## Deployment contract
 

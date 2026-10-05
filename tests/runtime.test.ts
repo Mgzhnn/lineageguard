@@ -4,9 +4,13 @@ import {
   LineageGuardBlockedError,
   LineageGuardDuplicateExecutionError,
   LineageGuardSession,
+  parseTracePayload,
+  TRACE_LIMITS,
+  TracePayloadError,
   type LineageGuardSessionSnapshot,
   type LineageGuardSnapshotStore,
   type RuntimeEvent,
+  type SemanticJudgeContext,
 } from "../sdk/index.ts";
 
 test("blocks a broken handoff before a downstream agent runs", async () => {
@@ -926,4 +930,452 @@ test("rejects rules that claim the reserved semantic judge id", () => {
       }),
     /reserved/i,
   );
+});
+
+test("one approval cannot be replayed through verifier whitespace canonicalization", async () => {
+  let executions = 0;
+  const issued = new Set(["APPROVAL-123"]);
+  const guard = new LineageGuardSession({
+    approvalVerifier: ({ approval }) => issued.has(approval.token.trim()),
+  }).recordSource("Request", "Prepare an email.");
+  const intent = (token: string) => ({
+    toolName: "send-email",
+    action: "Send email",
+    input: "hello",
+    sideEffect: true,
+    approval: { token, approvedBy: "reviewer@example.com" },
+  });
+
+  await guard.executeTool(intent("APPROVAL-123"), () => {
+    executions += 1;
+    return "sent";
+  });
+  for (const variant of ["APPROVAL-123 ", " APPROVAL-123", "\tAPPROVAL-123\n"]) {
+    await assert.rejects(
+      guard.executeTool(intent(variant), () => {
+        executions += 1;
+        return "sent again";
+      }),
+      (error: unknown) =>
+        error instanceof LineageGuardBlockedError && /consumed/i.test(error.decision.reason),
+    );
+  }
+  assert.equal(executions, 1);
+});
+
+test("restore ignores policy fields smuggled through the options bag", () => {
+  const guard = new LineageGuardSession({
+    blockAtOrAbove: "low",
+    toolPolicy: { deniedTools: ["send-*"] },
+  }).recordSource("Source", "The estimate may be 5%.");
+  const snapshot = guard.toSnapshot();
+  const restored = LineageGuardSession.restore(snapshot, {
+    blockAtOrAbove: "high",
+    toolPolicy: { defaultSideEffectMode: "allow", deniedTools: [] },
+    analysisMode: "semantic",
+  } as never);
+
+  const resnapshot = restored.toSnapshot();
+  assert.equal(resnapshot.blockAtOrAbove, "low");
+  assert.equal(resnapshot.analysisMode, snapshot.analysisMode);
+  assert.deepEqual(resnapshot.toolPolicy, snapshot.toolPolicy);
+  const decision = restored.authorizeTool({
+    toolName: "send-email",
+    action: "Send email",
+    sideEffect: true,
+  });
+  assert.equal(decision.status, "blocked");
+});
+
+test("times out a hanging semantic judge and applies the failure mode", async () => {
+  let signal: AbortSignal | undefined;
+  const hangingJudge = (context: Readonly<SemanticJudgeContext>) => {
+    signal = context.signal;
+    return new Promise<null>(() => undefined);
+  };
+  const events: RuntimeEvent[] = [];
+  const blocking = new LineageGuardSession({
+    semanticJudge: hangingJudge,
+    semanticJudgeTimeoutMs: 20,
+    onEvent: (event) => events.push(event),
+  }).recordSource("Source", "The review is still in progress.");
+
+  const blocked = await blocking.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "The review is still in progress.",
+  );
+  assert.equal(blocked.status, "blocked");
+  assert.ok(
+    blocked.report.analysis.issues.some(
+      (issue) =>
+        issue.title === "Semantic judge unavailable" &&
+        /timed out after 20 ms/.test(issue.explanation),
+    ),
+  );
+  assert.equal(signal?.aborted, true);
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type === "semantic-judge-failed" && /timed out/.test(event.message),
+    ),
+  );
+  assert.doesNotThrow(() => blocking.toSnapshot());
+
+  const warning = new LineageGuardSession({
+    semanticJudge: hangingJudge,
+    semanticJudgeTimeoutMs: 20,
+    semanticJudgeFailureMode: "warn",
+  }).recordSource("Source", "The review is still in progress.");
+  const warned = await warning.inspectHandoffAsync(
+    "writer",
+    "Writer",
+    "The review is still in progress.",
+  );
+  assert.equal(warned.status, "allowed");
+  assert.ok(
+    warned.report.analysis.issues.some(
+      (issue) => issue.severity === "low" && /timed out/.test(issue.explanation),
+    ),
+  );
+  assert.doesNotThrow(() => warning.toSnapshot());
+
+  assert.throws(
+    () =>
+      new LineageGuardSession({
+        semanticJudge: hangingJudge,
+        semanticJudgeTimeoutMs: 0,
+      }),
+    /positive number/i,
+  );
+});
+
+test("blocks a handoff beyond the trace limits instead of throwing", () => {
+  const events: RuntimeEvent[] = [];
+  const guard = new LineageGuardSession({
+    onEvent: (event) => events.push(event),
+  }).recordSource("Source", "The estimate may be 5%.");
+
+  const oversize = guard.inspectHandoff(
+    "writer",
+    "Writer",
+    "x".repeat(TRACE_LIMITS.stageTextCharacters + 1),
+  );
+  assert.equal(oversize.status, "blocked");
+  assert.match(oversize.reason, /at most 500000 characters/);
+  assert.equal(guard.isFrozen(), false);
+  assert.equal(guard.getTrace().length, 1);
+  assert.ok(
+    events.some(
+      (event) => event.type === "handoff-blocked" && /500000/.test(event.message),
+    ),
+  );
+
+  const longId = guard.inspectHandoff(
+    "w".repeat(TRACE_LIMITS.identifierCharacters + 1),
+    "Writer",
+    "The estimate may be 5%.",
+  );
+  assert.equal(longId.status, "blocked");
+  assert.match(longId.reason, /Stage id must be at most 128/);
+  const longLabel = guard.inspectHandoff(
+    "writer",
+    "L".repeat(TRACE_LIMITS.labelCharacters + 1),
+    "The estimate may be 5%.",
+  );
+  assert.equal(longLabel.status, "blocked");
+  assert.match(longLabel.reason, /Stage label must be at most 200/);
+
+  for (let index = 1; index < TRACE_LIMITS.stages; index += 1) {
+    assert.equal(
+      guard.inspectHandoff("reviewer", "Reviewer", "The estimate may be 5%.")
+        .status,
+      "allowed",
+    );
+  }
+  assert.equal(guard.getTrace().length, TRACE_LIMITS.stages);
+  const overflow = guard.inspectHandoff(
+    "reviewer",
+    "Reviewer",
+    "The estimate may be 5%.",
+  );
+  assert.equal(overflow.status, "blocked");
+  assert.match(overflow.reason, /at most 50 stages/);
+  assert.equal(guard.isFrozen(), false);
+  assert.equal(guard.getTrace().length, TRACE_LIMITS.stages);
+
+  const snapshot = guard.toSnapshot();
+  assert.doesNotThrow(() =>
+    parseTracePayload({
+      runName: snapshot.runName,
+      guardrail: snapshot.guardrail,
+      stages: snapshot.stages,
+    }),
+  );
+  assert.throws(
+    () =>
+      new LineageGuardSession().recordSource(
+        "Source",
+        "x".repeat(TRACE_LIMITS.stageTextCharacters + 1),
+      ),
+    TracePayloadError,
+  );
+  assert.throws(
+    () =>
+      new LineageGuardSession({
+        guardrail: "g".repeat(TRACE_LIMITS.guardrailCharacters + 1),
+      }),
+    TracePayloadError,
+  );
+});
+
+test("emits before committing so a throwing sink cannot hide a frozen session", async () => {
+  const blockingAgent = {
+    id: "writer",
+    name: "Writer",
+    execute: () => "The estimate is proven to be 50%.",
+  };
+  const ignoring = new LineageGuardSession({
+    onEvent: () => {
+      throw new Error("sink down");
+    },
+  }).recordSource("Source", "The estimate may be 5%.");
+  const result = await ignoring.runSequence([blockingAgent], {});
+  assert.equal(result.status, "blocked");
+  assert.equal(ignoring.isFrozen(), true);
+
+  const throwing = new LineageGuardSession({
+    eventSinkFailureMode: "throw",
+    onEvent: (event) => {
+      if (event.type === "handoff-blocked") throw new Error("sink down");
+    },
+  }).recordSource("Source", "The estimate may be 5%.");
+  await assert.rejects(throwing.runSequence([blockingAgent], {}), /sink down/);
+  assert.equal(throwing.isFrozen(), false);
+  assert.equal(throwing.getTrace().length, 1);
+  assert.equal(
+    throwing.inspectHandoff("writer", "Writer", "The estimate may be 5%.")
+      .status,
+    "allowed",
+  );
+
+  const noSource = new LineageGuardSession({
+    eventSinkFailureMode: "throw",
+    onEvent: () => {
+      throw new Error("sink down");
+    },
+  });
+  assert.throws(() => noSource.recordSource("Source", "Text."), /sink down/);
+  assert.equal(noSource.getTrace().length, 0);
+});
+
+test("the synchronous handoff path rejects re-entry from the event sink", () => {
+  let reentry: unknown;
+  const guard = new LineageGuardSession({
+    onEvent: (event) => {
+      if (event.type !== "handoff-blocked") return;
+      try {
+        guard.resetToLastVerified();
+      } catch (error) {
+        reentry = error;
+      }
+    },
+  }).recordSource("Source", "The estimate may be 5%.");
+
+  const decision = guard.inspectHandoff(
+    "writer",
+    "Writer",
+    "The estimate is proven to be 50%.",
+  );
+  assert.equal(decision.status, "blocked");
+  assert.equal(guard.isFrozen(), true);
+  assert.match((reentry as Error).message, /in progress/);
+  assert.equal(guard.resetToLastVerified().label, "Source");
+});
+
+test("a tool that throws leaves no idempotency record, so a retry re-invokes it", async () => {
+  let attempts = 0;
+  const guard = new LineageGuardSession().recordSource(
+    "Request",
+    "Read a record.",
+  );
+  const intent = {
+    toolName: "record-read",
+    action: "Read record",
+    input: "42",
+    sideEffect: false,
+    idempotencyKey: "read-42",
+  };
+  const flaky = () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("transient");
+    return { id: 42, attempt: attempts };
+  };
+
+  await assert.rejects(guard.executeTool(intent, flaky), /transient/);
+  assert.deepEqual(guard.toSnapshot().toolExecutions, []);
+  assert.deepEqual(await guard.executeTool(intent, flaky), {
+    id: 42,
+    attempt: 2,
+  });
+  assert.equal(attempts, 2);
+  assert.deepEqual(await guard.executeTool(intent, flaky), {
+    id: 42,
+    attempt: 2,
+  });
+  assert.equal(attempts, 2);
+});
+
+test("registerTool adds a host tool after construction and rejects duplicates", async () => {
+  const guard = new LineageGuardSession().recordSource(
+    "Request",
+    "Look up a record.",
+  );
+  guard.registerTool({
+    name: "record-read",
+    action: "Read record",
+    sideEffect: false,
+    execute: (id: string) => ({ id }),
+  });
+
+  assert.throws(
+    () =>
+      guard.registerTool({
+        name: "record-read",
+        action: "Read record again",
+        sideEffect: false,
+        execute: () => null,
+      }),
+    /already registered/,
+  );
+  assert.throws(
+    () =>
+      guard.registerTool({
+        name: " ",
+        action: "Read record",
+        sideEffect: false,
+        execute: () => null,
+      }),
+    /non-empty string/,
+  );
+  assert.deepEqual(
+    await guard.executeRegisteredTool<string, { id: string }>(
+      "record-read",
+      "CUS-7",
+    ),
+    { id: "CUS-7" },
+  );
+  await assert.rejects(
+    guard.executeRegisteredTool("missing", null),
+    /not registered/,
+  );
+});
+
+test("getToolClient returns a frozen client that routes through the policy", async () => {
+  let executions = 0;
+  const guard = new LineageGuardSession({
+    toolPolicy: { deniedTools: ["shell-*"] },
+    tools: [
+      {
+        name: "record-read",
+        action: "Read record",
+        sideEffect: false,
+        execute: (id: string) => {
+          executions += 1;
+          return { id };
+        },
+      },
+      {
+        name: "shell-exec",
+        action: "Run a shell command",
+        sideEffect: true,
+        execute: () => {
+          executions += 1;
+          return "ran";
+        },
+      },
+    ],
+  }).recordSource("Request", "Look up a record.");
+
+  const client = guard.getToolClient();
+  assert.ok(Object.isFrozen(client));
+  assert.deepEqual(await client.execute("record-read", "CUS-7"), {
+    id: "CUS-7",
+  });
+  await assert.rejects(
+    client.execute("shell-exec", "rm -rf /"),
+    (error: unknown) =>
+      error instanceof LineageGuardBlockedError &&
+      /explicitly denied/.test(error.decision.reason),
+  );
+  assert.equal(executions, 1);
+});
+
+test("authorizeToolAsync awaits the verifier without consuming the token", async () => {
+  let verifierCalls = 0;
+  const guard = new LineageGuardSession({
+    approvalVerifier: async ({ approval }) => {
+      verifierCalls += 1;
+      return approval.token === "signed";
+    },
+  }).recordSource("Request", "Prepare an email.");
+  const intent = {
+    toolName: "send-email",
+    action: "Send email",
+    input: "hello",
+    sideEffect: true,
+    approval: { token: "signed", approvedBy: "reviewer@example.com" },
+  };
+
+  const preflight = await guard.authorizeToolAsync(intent);
+  assert.equal(preflight.status, "allowed");
+  assert.equal(preflight.approvalVerified, true);
+  const rejected = await guard.authorizeToolAsync({
+    ...intent,
+    approval: { token: "forged", approvedBy: "reviewer@example.com" },
+  });
+  assert.equal(rejected.status, "approval-required");
+  // The preflight did not consume the token: execution still succeeds once.
+  assert.equal(await guard.executeTool(intent, () => "sent"), "sent");
+  assert.equal(verifierCalls, 3);
+
+  const failing = new LineageGuardSession({
+    approvalVerifier: async () => {
+      throw new Error("verifier offline");
+    },
+  }).recordSource("Request", "Prepare an email.");
+  const blocked = await failing.authorizeToolAsync(intent);
+  assert.equal(blocked.status, "blocked");
+  assert.match(blocked.reason, /failed closed/);
+});
+
+test("onEventError receives sink failures and its own failures are contained", () => {
+  const failures: Array<{ error: unknown; event: RuntimeEvent }> = [];
+  const guard = new LineageGuardSession({
+    onEvent: () => {
+      throw new Error("sink down");
+    },
+    onEventError: (error, event) => {
+      failures.push({ error, event });
+      throw new Error("reporter down");
+    },
+  });
+  assert.doesNotThrow(() => guard.recordSource("Source", "Source text."));
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].event.type, "source-recorded");
+  assert.match((failures[0].error as Error).message, /sink down/);
+
+  // eventSinkFailureMode: "throw" still reports through onEventError first.
+  const reported: RuntimeEvent[] = [];
+  const throwing = new LineageGuardSession({
+    eventSinkFailureMode: "throw",
+    onEvent: () => {
+      throw new Error("sink down");
+    },
+    onEventError: (_error, event) => {
+      reported.push(event);
+    },
+  });
+  assert.throws(() => throwing.recordSource("Source", "Source text."), /sink down/);
+  assert.equal(reported[0]?.type, "source-recorded");
 });

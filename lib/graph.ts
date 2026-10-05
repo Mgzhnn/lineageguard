@@ -356,11 +356,35 @@ export function runReliabilityGraphPipeline(
   }
   const edges: GraphEdgeResult[] = [];
 
+  const comparedTextFor = (node: TraceGraphStage, parentId: string) =>
+    node.inheritedClaims && Object.hasOwn(node.inheritedClaims, parentId)
+      ? node.inheritedClaims[parentId]
+      : node.text;
+  let edgeCount = 0;
+  let comparisonCharacters = 0;
+  for (const node of nodes) {
+    for (const parentId of node.parentIds) {
+      edgeCount += 1;
+      comparisonCharacters +=
+        nodeById.get(parentId)!.text.length +
+        comparedTextFor(node, parentId).length;
+    }
+  }
+  if (edgeCount > TRACE_LIMITS.graphEdges) {
+    throw new TracePayloadError(
+      `A trace graph can contain at most ${TRACE_LIMITS.graphEdges} parent links.`,
+    );
+  }
+  if (comparisonCharacters > TRACE_LIMITS.graphComparisonCharacters) {
+    throw new TracePayloadError(
+      `Trace graph comparisons must total at most ${TRACE_LIMITS.graphComparisonCharacters} characters across all parent links. Use inheritedClaims to compare only the inherited claim on each link.`,
+    );
+  }
+
   for (const node of nodes) {
     for (const parentId of node.parentIds) {
       const parent = nodeById.get(parentId)!;
-      const comparedText = node.inheritedClaims && Object.hasOwn(node.inheritedClaims, parentId)
-        ? node.inheritedClaims[parentId] : node.text;
+      const comparedText = comparedTextFor(node, parentId);
       const edgeIndex = edges.length;
       const edgeId = graphEdgeId(parentId, node.id);
       const pairAnalysis = analyzeLineage(

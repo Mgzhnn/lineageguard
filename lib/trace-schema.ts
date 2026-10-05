@@ -9,6 +9,13 @@ export const TRACE_LIMITS = {
   guardrailCharacters: 20_000,
   stageTextCharacters: 500_000,
   totalTextCharacters: 1_500_000,
+  // Each graph edge is a full pairwise analysis, so the work a request can
+  // demand is bounded by edge count and by the text compared across edges,
+  // not only by node count and total text. Twice the total-text limit admits
+  // any chain-shaped graph (each node compared once as parent, once as child)
+  // while rejecting dense fan-in over large texts.
+  graphEdges: 200,
+  graphComparisonCharacters: 3_000_000,
 } as const;
 
 export type TraceEvent = {

@@ -231,3 +231,55 @@ test("copies graph builder inputs before storing them", () => {
   });
   assert.equal(run.finalize().firstBlockingEdgeId, null);
 });
+
+test("bounds the pairwise work a dense graph can demand", () => {
+  const text = "The estimate may be 5% for some users.";
+  const dense = Array.from({ length: 22 }, (_, index) => ({
+    id: `n${index}`,
+    label: `Node ${index}`,
+    text,
+    parentIds: Array.from({ length: index }, (_, parent) => `n${parent}`),
+  }));
+  // 22 nodes with every earlier node as parent = 231 links, above the budget.
+  assert.throws(() => runReliabilityGraphPipeline(dense), /at most 200 parent links/);
+
+  const wide = Array.from({ length: 4 }, (_, index) => ({
+    id: `w${index}`,
+    label: `Node ${index}`,
+    text: "x".repeat(350_000),
+    parentIds: Array.from({ length: index }, (_, parent) => `w${parent}`),
+  }));
+  // 1.4M characters of text is within the total-text limit, but 6 links
+  // comparing 700k characters each (4.2M) is past the 3M comparison budget.
+  assert.throws(() => runReliabilityGraphPipeline(wide), /comparisons must total/);
+});
+
+test("LineageGuardGraphRun.fromPayload rebuilds a 1.1 graph payload with options", () => {
+  const run = LineageGuardGraphRun.fromPayload(
+    {
+      schemaVersion: "1.1",
+      runName: "Imported graph",
+      guardrail: "Do not publish without human approval.",
+      nodes: graphNodes.map((node) => ({
+        ...node,
+        parentIds: [...node.parentIds],
+        inheritedClaims:
+          "inheritedClaims" in node ? { ...node.inheritedClaims } : undefined,
+      })),
+    },
+    { blockAtOrAbove: "high" },
+  );
+
+  const trace = run.toTrace();
+  assert.equal(trace.runName, "Imported graph");
+  assert.equal(trace.guardrail, "Do not publish without human approval.");
+  assert.deepEqual(
+    trace.nodes.map((node) => node.id),
+    graphNodes.map((node) => node.id),
+  );
+  assert.deepEqual(trace.nodes[3].inheritedClaims, graphNodes[3].inheritedClaims);
+  assert.equal(run.finalize().firstBlockingEdgeId, "policy->writer");
+  assert.throws(() =>
+    LineageGuardGraphRun.fromPayload({ schemaVersion: "1.1", nodes: [] }),
+  );
+});
