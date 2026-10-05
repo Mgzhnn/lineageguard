@@ -22,6 +22,8 @@ All notable changes to LineageGuard are documented here.
 - Add adversarial regressions and 12 paired numeric evaluation cases, document
   recovery responsibilities, and execute both README quickstarts from the tarball.
 - Update fast-uri to patched 3.1.6; retain the two documented image-size exceptions.
+- Add a documented audit exception for the unpatched `braces` denial-of-service
+  advisory GHSA-vfj7-8cjw-p6xm, reachable only from development tooling.
 
 ### Compatibility notes
 

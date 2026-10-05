@@ -35,7 +35,7 @@ medical, legal, or safety review.
 ## Dependency audit policy
 
 CI runs `pnpm run audit:security` and fails on high-severity advisories except
-for the two explicitly reviewed exceptions below. New unfixable advisories are
+for the three explicitly reviewed exceptions below. New unfixable advisories are
 not ignored automatically.
 
 As of August 17, 2026, the remaining unfixable findings are two denial-of-service
@@ -44,8 +44,17 @@ LineageGuard does not expose image uploads or call this parser at runtime. Keep
 tracking GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq, and remove this exception
 as soon as Vinext or `image-size` publishes a fixed dependency path.
 
+As of October 5, 2026, GHSA-vfj7-8cjw-p6xm reports a stack-exhaustion
+denial of service in `braces@3.0.3` and lists no patched version; 3.0.3 is the
+latest release. It reaches the tree only through `micromatch` and `fast-glob`
+in `eslint-config-next` and in Vinext's `vite-plugin-commonjs`, both
+development tooling that expands glob patterns from repository configuration.
+`pnpm audit --prod` reports no known vulnerabilities, and the built Worker
+contains no `braces`, `micromatch` or `fast-glob` code. Remove this exception
+as soon as `braces` publishes a fixed release.
+
 The 2026-09-05 audit updated fast-uri from 3.1.5 to patched 3.1.6 for four
-additional high-severity advisories. The audit gate passes with only the two
-existing image-size exceptions. These exceptions still count as known vulnerable
+additional high-severity advisories. The audit gate passes with only the
+documented exceptions above. These exceptions still count as known vulnerable
 dependencies; they are not a claim of zero vulnerabilities. See AUDIT.md for
 reproductions, exact test evidence, compatibility notes and remaining boundaries.
