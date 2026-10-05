@@ -2,7 +2,7 @@
 
 All notable changes to LineageGuard are documented here.
 
-## Unreleased
+## 0.8.0
 
 - Reject inherited object properties as API tenant credentials and use a fixed
   site origin for public metadata instead of trusting forwarded headers.
@@ -36,9 +36,11 @@ identity is not preserved. Case-distinct tool names no longer share an idempoten
 fingerprint. Custom built-in subclasses (including Node Buffer) must be converted
 to supported plain values such as a private, non-shared Uint8Array. Special tag-shaped objects, sparse arrays, and locale-sensitive key
 orderings can produce different fingerprints; existing incompatible operation
-records fail closed and approvals may need reissuing. Public package export paths,
-package versions and snapshot schema version remain unchanged. Nothing here
-publishes a new npm version or deploys the live site.
+records fail closed and approvals may need reissuing. Public package export
+paths and the snapshot schema version remain unchanged. Because verdicts and
+input handling change, these fixes ship as a minor release rather than a patch.
+Hosted `/api/evaluate` now returns 503 unless `LINEAGEGUARD_API_KEYS_JSON` or
+`LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY=true` is configured.
 
 ## 0.7.0
 
