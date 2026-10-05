@@ -45,14 +45,14 @@ English; dynamic semantic analysis is available through a host-provided judge.
 | 📡 **OTLP adapter** | Dependency-free OTLP/JSON ingestion for OpenTelemetry GenAI spans |
 | 🔬 **Forensic workspace** | Visual replay UI plus a framework-neutral HTTP/JSON gate |
 
-## Audit changes awaiting release
+## Changes in 0.8.0
 
-This audit branch repairs tenant authentication, approval/input integrity,
+0.8.0 repairs tenant authentication, approval/input integrity,
 concurrent handoffs, snapshot safety, numeric canonicalization, graph
 contamination, and import/report validation. See [AUDIT.md](./AUDIT.md) for
 reproductions and verification results and
-[IMPLEMENTATION_PROMPT.md](./IMPLEMENTATION_PROMPT.md) for the requirements.
-These are source changes; a Git push does not update the npm package or live demo.
+[CHANGELOG.md](./CHANGELOG.md) for compatibility notes. Some verdicts and
+malformed-input responses change, so review the notes below before upgrading.
 
 Signed numeric changes and exact decimal conversions are now checked, range
 signals carry units on both endpoints, and every blocking graph branch is
@@ -323,7 +323,8 @@ The response contains `decision: "allow" | "block"`, the blocking transition
 or graph edge, and a recovery packet. Chain payloads use schema `1.0`; graph
 payloads use schema `1.1`. The endpoint is stateless and uses the same engine.
 
-Loopback development works without credentials. Hosted access requires either
+Loopback requests work without credentials only when `NODE_ENV=development`;
+with no credentials configured, any other request is refused with 503. Hosted access requires either
 an explicitly trusted workspace-authenticated user header
 (`LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY=true` behind a header-sanitizing
 dispatcher) or `LINEAGEGUARD_API_KEYS_JSON` plus `x-lineageguard-tenant` and a
@@ -387,7 +388,7 @@ pnpm build
 pnpm test:render
 ```
 
-The current `curated-regression-v2` set contains 33 deliberately small
+The current `curated-regression-v2` set contains 45 deliberately small
 positive and negative English cases, including equivalence rewrites that must
 stay clean and structural mutations that must block:
 
