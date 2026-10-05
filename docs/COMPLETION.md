@@ -171,7 +171,7 @@ and `pnpm verify` is green.
       `v0.9.0`, and let the reviewed workflow publish.
       *Check:* `npm view lineageguard version` prints `0.9.0` with provenance,
       and the workflow run shows the environment approval.
-- [ ] **8.2** Deploy the site through Codex and confirm the hero badge and
+- [x] **8.2** Deploy the site through Codex and confirm the hero badge and
       `/api/health` report 0.9.0.
       *Check:* `curl -s https://lineageguard.ugrp44group.chatgpt.site/api/health`
       contains `"0.9.0"`.
