@@ -72,3 +72,35 @@ test("accepts workspace identity and limits each tenant independently", () => {
   assert.equal(limited.ok, false);
   if (!limited.ok) assert.equal(limited.status, 429);
 });
+
+test("rejects a malformed workspace identity header instead of minting a tenant", () => {
+  process.env.LINEAGEGUARD_TRUST_WORKSPACE_IDENTITY = "true";
+  for (const value of ["a@x.com,evil", "not-an-email ; <script>", "two words@x.com", "a@x.com, b@y.com"]) {
+    const access = authorizeEvaluationRequest(
+      new Request("https://public.example/api/evaluate", {
+        headers: { "oai-authenticated-user-email": value },
+      }),
+    );
+    assert.equal(access.ok, false, value);
+    if (!access.ok) assert.equal(access.status, 401);
+  }
+  const access = authorizeEvaluationRequest(
+    new Request("https://public.example/api/evaluate", {
+      headers: { "oai-authenticated-user-email": " Reviewer@Example.com " },
+    }),
+  );
+  assert.equal(access.ok, true);
+  if (access.ok) assert.equal(access.tenantId, "workspace:reviewer@example.com");
+});
+
+test("the shared JSON helper sends no-store and nosniff on every response", async () => {
+  const { json } = await import("../lib/api-response.ts");
+  const response = json({ status: "ok" }, { status: 201, headers: { "x-custom": "1" } });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("x-custom"), "1");
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
+  assert.deepEqual(await response.json(), { status: "ok" });
+});

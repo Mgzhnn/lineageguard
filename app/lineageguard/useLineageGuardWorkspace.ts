@@ -15,13 +15,14 @@ import {
 } from "@/lib/analysis";
 import { examples } from "@/lib/examples";
 import { runReliabilityPipeline } from "@/lib/pipeline";
-import {
-  createSampleTracePayload,
-  parseTracePayload,
-  TRACE_LIMITS,
-} from "@/lib/trace-schema";
+import { createSampleTracePayload, TRACE_LIMITS } from "@/lib/trace-schema";
 import { PIPELINE_VERSION } from "@/lib/version";
-import { requireCurrentReport } from "./report-state";
+import {
+  isReportCurrent,
+  readTraceImport,
+  requireCurrentReport,
+  type TraceImportSource,
+} from "./report-state";
 
 export const issueLabels: Record<IssueType, string> = {
   number: "NUMBER DRIFT",
@@ -34,6 +35,8 @@ export const issueLabels: Record<IssueType, string> = {
 };
 
 type ReviewVerdict = "confirmed" | "dismissed";
+
+type ImportMessage = { tone: "error" | "success"; text: string };
 
 function cloneStages(stages: TraceStage[]) {
   return stages.map((stage) => ({ ...stage }));
@@ -65,7 +68,6 @@ export function useLineageGuardWorkspace() {
   const analyzedStages = pipelineRun.graph.nodes;
   const importRevision = useRef(0);
   const [actionMessage, setActionMessage] = useState("");
-  const [isFresh, setIsFresh] = useState(true);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [shareState, setShareState] = useState<"idle" | "copied">("idle");
   const [replayIndex, setReplayIndex] = useState(0);
@@ -75,11 +77,17 @@ export function useLineageGuardWorkspace() {
     pipelineRun.modules.length,
   );
   const [pipelineRunning, setPipelineRunning] = useState(false);
-  const [importMessage, setImportMessage] = useState("");
+  const [importMessage, setImportMessage] = useState<ImportMessage | null>(
+    null,
+  );
   const [recoveryCopyState, setRecoveryCopyState] = useState<
     "idle" | "copied"
   >("idle");
 
+  const isFresh = useMemo(
+    () => isReportCurrent(pipelineRun, stages, guardrail),
+    [pipelineRun, stages, guardrail],
+  );
   const firstMutation = useMemo(() => {
     if (result.firstMutationIndex === null) return null;
     return {
@@ -127,7 +135,6 @@ export function useLineageGuardWorkspace() {
 
   function markEdited() {
     importRevision.current += 1;
-    setIsFresh(false);
     setIsPlaying(false);
     setPipelineRunning(false);
     setSelectedExample("");
@@ -193,8 +200,7 @@ export function useLineageGuardWorkspace() {
     setReplayIndex(0);
     setIsPlaying(false);
     setReviews({});
-    setImportMessage("");
-    setIsFresh(true);
+    setImportMessage(null);
   }
 
   function updateStage(index: number, field: "label" | "text", value: string) {
@@ -204,13 +210,10 @@ export function useLineageGuardWorkspace() {
         stageIndex === index ? { ...stage, [field]: value } : stage,
       ),
     );
-    setIsFresh(false);
-    setIsPlaying(false);
-    setSelectedExample("");
   }
 
   function addStage() {
-    if (stages.length >= 7) return;
+    if (stages.length >= TRACE_LIMITS.stages) return;
     markEdited();
     setStages((current) => [
       ...current,
@@ -220,9 +223,6 @@ export function useLineageGuardWorkspace() {
         text: "",
       },
     ]);
-    setIsFresh(false);
-    setIsPlaying(false);
-    setSelectedExample("");
   }
 
   function removeStage(index: number) {
@@ -231,9 +231,6 @@ export function useLineageGuardWorkspace() {
     setStages((current) =>
       current.filter((_, stageIndex) => stageIndex !== index),
     );
-    setIsFresh(false);
-    setIsPlaying(false);
-    setSelectedExample("");
   }
 
   function runAnalysis() {
@@ -251,7 +248,33 @@ export function useLineageGuardWorkspace() {
     );
     setIsPlaying(false);
     setReviews({});
-    setIsFresh(true);
+  }
+
+  /** The one import branch: file picker and paste box both end here. */
+  function importTraceText(text: string, source: TraceImportSource) {
+    importRevision.current += 1;
+    const imported = readTraceImport(text, source);
+    if (!imported.ok) {
+      setImportMessage({ tone: "error", text: imported.message });
+      return;
+    }
+    const { payload } = imported;
+    const nextStages = cloneStages(payload.stages);
+    const nextPipeline = runReliabilityPipeline(nextStages, payload.guardrail);
+    setStages(nextStages);
+    setGuardrail(payload.guardrail);
+    setPipelineRun(nextPipeline);
+    setPipelineCursor(nextPipeline.modules.length);
+    setPipelineRunning(false);
+    setReplayIndex(0);
+    setIsPlaying(false);
+    setReviews({});
+    setSelectedExample("");
+    setActionMessage("");
+    setImportMessage({
+      tone: "success",
+      text: `Imported “${payload.runName}” · ${nextStages.length} stages`,
+    });
   }
 
   async function importTrace(event: ChangeEvent<HTMLInputElement>) {
@@ -259,40 +282,23 @@ export function useLineageGuardWorkspace() {
     event.target.value = "";
     if (!file) return;
     const revision = ++importRevision.current;
-    if (file.size > TRACE_LIMITS.payloadBytes) {
-      setImportMessage("Import failed: JSON file must be smaller than 2 MB.");
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      if (revision !== importRevision.current) return;
+      setImportMessage({
+        tone: "error",
+        text: "Import failed: the file could not be read.",
+      });
       return;
     }
-    try {
-      const text = await file.text();
-      if (revision !== importRevision.current) return;
-      const parsed = parseTracePayload(JSON.parse(text));
-      const nextStages = cloneStages(parsed.stages);
-      const nextPipeline = runReliabilityPipeline(
-        nextStages,
-        parsed.guardrail,
-      );
-      setStages(nextStages);
-      setGuardrail(parsed.guardrail);
-      setPipelineRun(nextPipeline);
-      setPipelineCursor(nextPipeline.modules.length);
-      setPipelineRunning(false);
-      setReplayIndex(0);
-      setIsPlaying(false);
-      setReviews({});
-      setSelectedExample("");
-      setImportMessage(
-        `Imported “${parsed.runName}” · ${nextStages.length} stages`,
-      );
-      setIsFresh(true);
-    } catch (error) {
-      if (revision !== importRevision.current) return;
-      setImportMessage(
-        `Import failed: ${
-          error instanceof Error ? error.message : "invalid trace file"
-        }`,
-      );
-    }
+    if (revision !== importRevision.current) return;
+    importTraceText(text, "file");
+  }
+
+  function importPastedTrace(text: string) {
+    importTraceText(text, "paste");
   }
 
   function downloadSampleTrace() {
@@ -398,9 +404,6 @@ export function useLineageGuardWorkspace() {
     confirmedCount,
     dismissedCount,
     firstTransitionLabel,
-    setGuardrail,
-    setIsFresh,
-    setSelectedExample,
     setReplayIndex,
     setIsPlaying,
     setReviews,
@@ -410,6 +413,7 @@ export function useLineageGuardWorkspace() {
     removeStage,
     runAnalysis,
     importTrace,
+    importPastedTrace,
     downloadSampleTrace,
     copyReport,
     copySharePost,

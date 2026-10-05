@@ -89,7 +89,7 @@ The detector uses three inspectable rule families:
 | Family | Protects | Current signals |
 | --- | --- | --- |
 | Evidence | factual structure | numbers, ranges, money, dates, quantities, written-out numbers |
-| Meaning | semantic boundaries | English certainty, quantifiers, and negation; optional dynamic judge |
+| Meaning | semantic boundaries | English certainty, quantifiers, and negation, including a hedge or limiting quantifier dropped from a restated claim; optional dynamic judge |
 | Authority | permissions | English protected instructions and action verbs |
 
 Evidence signals canonicalize before comparison: currency magnitudes ($5k →
@@ -159,6 +159,11 @@ recovery state, event sequence, and execution idempotency records without
 storing raw approval tokens. Restore also requires exact custom-rule ID parity,
 preventing a resumed session from silently changing its detector policy.
 
+`sdk/runtime.ts` is a barrel. The session lives in `sdk/runtime/session.ts`,
+with `types.ts`, `snapshot.ts` (option, stage and snapshot validation),
+`tool-gate.ts` (the registered-tool boundary) and `semantic-judge.ts` (judge
+timeout and replay rule).
+
 ## Trust boundaries
 
 - Imported files and API bodies are capped at 2,000,000 bytes.
@@ -191,6 +196,10 @@ preventing a resumed session from silently changing its detector policy.
   optional semantic judge can cover harder paraphrases through
   `inspectHandoffAsync`, `runAgent`, and `runSequence`, but its quality and cost
   belong to the host.
+- The built-in lexicons are English. Text in another script is reported as a
+  low-severity coverage issue rather than clean; text in another Latin-script
+  language (German, Spanish, French) is covered only by the numeric rules and
+  the same coverage check, never by the meaning or authority families.
 - The SDK assumes the host owns the actual tool boundary. Code that can bypass
   the wrapper can also bypass LineageGuard.
 - A `LineageGuardSession` is a serial state machine. DAG analysis is supported,

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { examples } from "@/lib/examples";
+import { TRACE_LIMITS } from "@/lib/trace-schema";
 import { PRODUCT_VERSION } from "@/lib/version";
 import {
   issueLabels,
@@ -44,12 +46,14 @@ export default function LineageGuard() {
     removeStage,
     runAnalysis,
     importTrace,
+    importPastedTrace,
     downloadSampleTrace,
     copyReport,
     copySharePost,
     copyRecoveryPacket,
     exportJson,
   } = useLineageGuardWorkspace();
+  const [pastedTrace, setPastedTrace] = useState("");
 
   return (
     <main>
@@ -133,6 +137,7 @@ export default function LineageGuard() {
           <div className="example-buttons">
             {examples.map((example) => (
               <button
+                aria-pressed={selectedExample === example.id}
                 className={selectedExample === example.id ? "selected" : ""}
                 key={example.id}
                 onClick={() => loadExample(example.id)}
@@ -173,16 +178,34 @@ export default function LineageGuard() {
                   Sample schema
                 </button>
               </div>
+              <div className="paste-field">
+                <label htmlFor="paste-trace">Paste trace JSON</label>
+                <textarea
+                  id="paste-trace"
+                  onChange={(event) => setPastedTrace(event.target.value)}
+                  placeholder='{"schemaVersion": "1.0", "stages": [...]}'
+                  rows={4}
+                  spellCheck={false}
+                  value={pastedTrace}
+                />
+                <button
+                  disabled={pastedTrace.trim() === ""}
+                  onClick={() => importPastedTrace(pastedTrace)}
+                  type="button"
+                >
+                  Import pasted JSON
+                </button>
+              </div>
               {importMessage && (
                 <p
                   className={
-                    importMessage.startsWith("Import failed")
+                    importMessage.tone === "error"
                       ? "import-error"
                       : "import-success"
                   }
                   role="status"
                 >
-                  {importMessage}
+                  {importMessage.text}
                 </p>
               )}
             </div>
@@ -252,7 +275,8 @@ export default function LineageGuard() {
             <div className="input-actions">
               <button
                 className="secondary-button"
-                disabled={stages.length >= 7}
+                disabled={stages.length >= TRACE_LIMITS.stages}
+                title={`Up to ${TRACE_LIMITS.stages} stages per trace`}
                 onClick={addStage}
                 type="button"
               >
@@ -265,7 +289,7 @@ export default function LineageGuard() {
             </div>
           </section>
 
-          <aside className="report-panel" aria-live="polite">
+          <aside className="report-panel">
             <div className="panel-heading report-heading">
               <div>
                 <span className="section-kicker">02 · FORENSIC REPORT</span>
@@ -321,7 +345,7 @@ export default function LineageGuard() {
             </section>
 
             <div className={`verdict-card ${result.overallSeverity}`}>
-              <div className="verdict-topline">
+              <div className="verdict-topline" aria-live="polite">
                 <span className="signal-icon" aria-hidden="true">
                   {result.firstMutationIndex === null ? "✓" : "!"}
                 </span>
@@ -582,6 +606,7 @@ export default function LineageGuard() {
                             className={
                               reviews[issue.id] === "confirmed" ? "active" : ""
                             }
+                            disabled={!isFresh}
                             onClick={() =>
                               setReviews((current) => ({
                                 ...current,
@@ -596,6 +621,7 @@ export default function LineageGuard() {
                             className={
                               reviews[issue.id] === "dismissed" ? "active" : ""
                             }
+                            disabled={!isFresh}
                             onClick={() =>
                               setReviews((current) => ({
                                 ...current,

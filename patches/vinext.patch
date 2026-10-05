@@ -1,8 +1,8 @@
 diff --git a/dist/server/static-file-cache.js b/dist/server/static-file-cache.js
-index ba3bec2bc1156662581cbabc0ab116728cbf2968..2688a3fcd73e5c548af40df965c757c8bf4c2f7d 100644
+index 892bb4ba4292d54b4f389cfd2ae1975d5c81c151..087136d2e45d3c9f57a98722f8a328eeb07a7bff 100644
 --- a/dist/server/static-file-cache.js
-+++ b/dist/server/static-file-cache.js	
-@@ -204,7 +204,7 @@ async function* walkFilesWithStats(dir, base = dir) {
++++ b/dist/server/static-file-cache.js
+@@ -243,7 +243,7 @@ async function* walkFilesWithStats(dir, base = dir) {
  		const batch = files.slice(i, i + STAT_BATCH_SIZE);
  		const stats = await Promise.all(batch.map((f) => fsp.stat(f)));
  		for (let j = 0; j < batch.length; j++) yield {

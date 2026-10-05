@@ -231,6 +231,26 @@ const IGNORED_CONTENT_KEYS = new Set([
   "type",
 ]);
 
+const TEXT_PART_TYPES = new Set(["text", "output_text"]);
+const MESSAGE_SHAPE_KEYS = ["text", "content", "message", "parts", "output_text"];
+
+/**
+ * Whether a decoded JSON value is a message, a typed part, or a list of
+ * them. Only such values are unwrapped from a JSON-shaped string; any other
+ * JSON the model wrote is its answer and stays verbatim.
+ */
+function isMessageShape(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every((item) => isMessageShape(item));
+  }
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.role === "string" ||
+    typeof value.type === "string" ||
+    MESSAGE_SHAPE_KEYS.some((key) => key in value)
+  );
+}
+
 function collectText(value: unknown, depth = 0): string[] {
   if (depth > 32) throw new TracePayloadError("OTLP message content exceeds the nesting limit.");
   if (value === null || value === undefined) return [];
@@ -243,8 +263,9 @@ function collectText(value: unknown, depth = 0): string[] {
     ) {
       try {
         const parsed = JSON.parse(trimmed) as unknown;
-        const nested = collectText(parsed, depth + 1);
-        if (nested.length) return nested;
+        // A message/parts shape is unwrapped even when it holds no text
+        // (for example a lone tool call): its raw JSON is never lineage text.
+        if (isMessageShape(parsed)) return collectText(parsed, depth + 1);
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
         // A text response that merely resembles JSON is still valid content.
@@ -259,8 +280,18 @@ function collectText(value: unknown, depth = 0): string[] {
     return value.flatMap((item) => collectText(item, depth + 1));
   }
   if (!isRecord(value)) return [];
+  // A typed part contributes text only when it is a text part. Tool calls,
+  // tool results, reasoning and binary parts are not lineage text, and their
+  // arguments must never be flattened into a node.
+  if (
+    typeof value.type === "string" &&
+    value.type !== "message" &&
+    !TEXT_PART_TYPES.has(value.type)
+  ) {
+    return [];
+  }
 
-  const prioritizedKeys = ["text", "content", "message", "parts", "output_text"];
+  const prioritizedKeys = MESSAGE_SHAPE_KEYS;
   const prioritized = prioritizedKeys.flatMap((key) =>
     key in value ? collectText(value[key], depth + 1) : [],
   );
