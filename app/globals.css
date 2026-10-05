@@ -534,6 +534,37 @@ a {
   clip: rect(0 0 0 0);
 }
 
+.ingestion-strip .paste-field {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.ingestion-strip .paste-field label {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  color: #778499;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  cursor: default;
+}
+
+.ingestion-strip .paste-field label:hover {
+  border-color: transparent;
+  color: #778499;
+}
+
+.ingestion-strip .paste-field textarea {
+  padding: 9px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 .ingestion-strip > p {
   grid-column: 1 / -1;
   margin: 0;

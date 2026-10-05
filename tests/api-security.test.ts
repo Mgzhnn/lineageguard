@@ -92,3 +92,15 @@ test("rejects a malformed workspace identity header instead of minting a tenant"
   assert.equal(access.ok, true);
   if (access.ok) assert.equal(access.tenantId, "workspace:reviewer@example.com");
 });
+
+test("the shared JSON helper sends no-store and nosniff on every response", async () => {
+  const { json } = await import("../lib/api-response.ts");
+  const response = json({ status: "ok" }, { status: 201, headers: { "x-custom": "1" } });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("x-custom"), "1");
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
+  assert.deepEqual(await response.json(), { status: "ok" });
+});

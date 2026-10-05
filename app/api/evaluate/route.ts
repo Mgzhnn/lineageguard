@@ -1,4 +1,5 @@
 import type { Severity } from "@/lib/analysis";
+import { json } from "@/lib/api-response";
 import { authorizeEvaluationRequest } from "@/lib/api-security";
 import {
   parseTraceGraphPayload,
@@ -23,13 +24,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 class RequestPayloadTooLargeError extends Error {}
-
-function json(body: unknown, init: ResponseInit = {}) {
-  const headers = new Headers(init.headers);
-  headers.set("cache-control", "no-store");
-  headers.set("x-content-type-options", "nosniff");
-  return Response.json(body, { ...init, headers });
-}
 
 async function readRequestText(request: Request) {
   const contentLength = request.headers.get("content-length");
