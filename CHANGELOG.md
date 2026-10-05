@@ -2,7 +2,7 @@
 
 All notable changes to LineageGuard are documented here.
 
-## Unreleased
+## 0.9.0
 
 - SDK: add `semanticJudgeTimeoutMs` (default 30 s) and
   `SemanticJudgeContext.signal`; return a blocked decision instead of throwing
