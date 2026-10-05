@@ -191,6 +191,10 @@ preventing a resumed session from silently changing its detector policy.
   optional semantic judge can cover harder paraphrases through
   `inspectHandoffAsync`, `runAgent`, and `runSequence`, but its quality and cost
   belong to the host.
+- The built-in lexicons are English. Text in another script is reported as a
+  low-severity coverage issue rather than clean; text in another Latin-script
+  language (German, Spanish, French) is covered only by the numeric rules and
+  the same coverage check, never by the meaning or authority families.
 - The SDK assumes the host owns the actual tool boundary. Code that can bypass
   the wrapper can also bypass LineageGuard.
 - A `LineageGuardSession` is a serial state machine. DAG analysis is supported,

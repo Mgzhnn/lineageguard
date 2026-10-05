@@ -371,10 +371,13 @@ See [docs/trace-contract.md](./docs/trace-contract.md) for validation rules.
 pnpm run verify
 ```
 
-`pnpm run verify` is the same release gate used by GitHub Actions. It performs lint,
-type checks, detector/runtime/OTLP tests, a production build, rendered API
-checks, the curated regression evaluation, the executable demos, and a real
-tarball install in an isolated consumer project.
+`pnpm run verify` is the core of the release gate used by GitHub Actions. It
+performs lint, type checks, detector/runtime/OTLP tests, a production build,
+rendered API checks, the curated regression evaluation, the executable demos,
+and a real tarball install in an isolated consumer project. CI additionally
+runs `pnpm audit:security` and imports the packed SDK on Node.js 20, and the
+publish workflow additionally runs `scripts/verify-release-tag.mjs`, requires
+the tagged commit to be on `main`, and repeats the Node.js 20 import.
 
 Individual commands:
 
