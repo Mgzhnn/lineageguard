@@ -63,7 +63,7 @@
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vinext": "1.0.1",
-    "vite": "8.2.1",
+    "vite": "8.2.4",
     "webpack": "5.109.2",
     "wrangler": "4.123.0"
   },
