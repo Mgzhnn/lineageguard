@@ -27,6 +27,8 @@ export type ToolGateHost = {
   revision(): number;
   currentRunId(): string;
   emit(type: "tool-allowed" | "tool-blocked", message: string): void;
+  /** Persists the reservation before a side effect runs (toolExecutionStore). */
+  beforeSideEffect?(): Promise<void>;
 };
 
 type ToolExecutionRecord = PersistedToolExecution & {
@@ -528,6 +530,17 @@ export class ToolGate {
       if (this.host.isFrozen() || this.host.revision() !== revision) {
         throw new LineageGuardBlockedError({ ...decision, status: "blocked",
           reason: "The run changed or was frozen before tool execution." });
+      }
+      // The consumed token and the pending idempotency record are only in
+      // memory until saved. Save them before the side effect, so a crash during
+      // it cannot be resumed into a second run of the same approval
+      // (2026-10-22 review).
+      if (intent.sideEffect && this.host.beforeSideEffect) {
+        await this.host.beforeSideEffect();
+        if (this.host.isFrozen() || this.host.revision() !== revision) {
+          throw new LineageGuardBlockedError({ ...decision, status: "blocked",
+            reason: "The run changed or was frozen before tool execution." });
+        }
       }
       return execute(decision.intent.input as TInput);
     });

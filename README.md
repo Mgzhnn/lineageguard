@@ -196,7 +196,10 @@ await tools.execute("send-email", email, {
 
 The callback is never called when policy denies the tool, the approval is
 missing or invalid, the token was already consumed, or the idempotency key was
-used for another operation.
+used for another operation. Give the session a `toolExecutionStore` (the same
+kind of store as `checkpoint()`) to keep that true across a crash: the consumed
+token and the pending key are saved before the tool runs, so a resumed session
+refuses to run the same approved call again.
 
 Persist a session through any durable adapter:
 

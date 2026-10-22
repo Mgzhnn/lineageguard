@@ -234,38 +234,57 @@ const IGNORED_CONTENT_KEYS = new Set([
 const TEXT_PART_TYPES = new Set(["text", "output_text"]);
 const MESSAGE_SHAPE_KEYS = ["text", "content", "message", "parts", "output_text"];
 
+// Part types instrumentations emit (OTel GenAI conventions and the common
+// provider formats). A model's own JSON answer such as {"type":"refund",...}
+// is not one of them.
+const KNOWN_PART_TYPES = new Set([
+  "text", "output_text", "input_text", "message", "refusal", "reasoning",
+  "tool_call", "tool_call_response", "tool_result", "tool_use",
+  "function_call", "function_call_output", "blob", "file", "uri", "image",
+  "image_url",
+]);
+
 /**
  * Whether a decoded JSON value is a message, a typed part, or a list of
  * them. Only such values are unwrapped from a JSON-shaped string; any other
- * JSON the model wrote is its answer and stays verbatim.
+ * JSON the model wrote is its answer and stays verbatim. A bare "message" or
+ * "text" key is not enough: {"message":"Refund 50 dollars","amount":5000} is an
+ * answer, and unwrapping it dropped the amount (2026-10-22 review).
  */
-function isMessageShape(value: unknown): boolean {
+function isMessageShape(value: unknown, depth = 0): boolean {
+  if (depth > 32) return false;
   if (Array.isArray(value)) {
-    return value.length > 0 && value.every((item) => isMessageShape(item));
+    return value.length > 0 && value.every((item) => isMessageShape(item, depth + 1));
   }
   if (!isRecord(value)) return false;
   return (
     typeof value.role === "string" ||
-    typeof value.type === "string" ||
-    MESSAGE_SHAPE_KEYS.some((key) => key in value)
+    Array.isArray(value.parts) ||
+    (typeof value.type === "string" && KNOWN_PART_TYPES.has(value.type))
   );
 }
 
-function collectText(value: unknown, depth = 0): string[] {
+/**
+ * `mayUnwrap` is true for the attribute value itself and the items of a
+ * top-level array. A string found under a message or part key (the text of a
+ * text part) is the model's words and is never JSON-parsed again.
+ */
+function collectText(value: unknown, depth = 0, mayUnwrap = true): string[] {
   if (depth > 32) throw new TracePayloadError("OTLP message content exceeds the nesting limit.");
   if (value === null || value === undefined) return [];
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return [];
     if (
-      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      mayUnwrap &&
+      ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]")))
     ) {
       try {
         const parsed = JSON.parse(trimmed) as unknown;
         // A message/parts shape is unwrapped even when it holds no text
         // (for example a lone tool call): its raw JSON is never lineage text.
-        if (isMessageShape(parsed)) return collectText(parsed, depth + 1);
+        if (isMessageShape(parsed)) return collectText(parsed, depth + 1, false);
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
         // A text response that merely resembles JSON is still valid content.
@@ -277,7 +296,7 @@ function collectText(value: unknown, depth = 0): string[] {
     return [`${value}`];
   }
   if (Array.isArray(value)) {
-    return value.flatMap((item) => collectText(item, depth + 1));
+    return value.flatMap((item) => collectText(item, depth + 1, mayUnwrap));
   }
   if (!isRecord(value)) return [];
   // A typed part contributes text only when it is a text part. Tool calls,
@@ -293,12 +312,12 @@ function collectText(value: unknown, depth = 0): string[] {
 
   const prioritizedKeys = MESSAGE_SHAPE_KEYS;
   const prioritized = prioritizedKeys.flatMap((key) =>
-    key in value ? collectText(value[key], depth + 1) : [],
+    key in value ? collectText(value[key], depth + 1, false) : [],
   );
   if (prioritized.length) return prioritized;
 
   return Object.entries(value).flatMap(([key, item]) =>
-    IGNORED_CONTENT_KEYS.has(key) ? [] : collectText(item, depth + 1),
+    IGNORED_CONTENT_KEYS.has(key) ? [] : collectText(item, depth + 1, false),
   );
 }
 

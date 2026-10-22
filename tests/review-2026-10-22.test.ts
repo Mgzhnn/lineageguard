@@ -218,3 +218,100 @@ test("a deduplicated 128-character agent id still fits the id limit", () => {
   assert.ok(parsed.stages.every((stage) => stage.id.length <= 128));
   assert.doesNotThrow(() => parseTracePayload({ stages: parsed.stages }));
 });
+
+// Group 3: SDK.
+import { LineageGuardSession } from "../sdk/runtime.ts";
+
+test("with a toolExecutionStore, a crash during an approved tool cannot replay it", async () => {
+  let sent = 0;
+  const saved = new Map<string, unknown>();
+  const store = {
+    load: async (id: string) => structuredClone((saved.get(id) ?? null) as never),
+    save: async (snapshot: { sessionId: string }) => { saved.set(snapshot.sessionId, structuredClone(snapshot)); },
+  };
+  const approvalVerifier = (check: { approval: { token: string } }) => check.approval.token === "T-1";
+  let crash = true;
+  const tools = [{
+    name: "send-email", action: "Send", sideEffect: true,
+    execute: () => {
+      sent += 1;
+      if (crash) throw new Error("process died after the email left");
+      return "sent";
+    },
+  }];
+  const session = new LineageGuardSession({ approvalVerifier, tools, toolExecutionStore: store })
+    .recordSource("src", "Reply to the customer about the refund.");
+  await session.checkpoint(store);
+  const call = { approval: { token: "T-1", approvedBy: "reviewer" }, idempotencyKey: "send:42" };
+  await assert.rejects(session.getToolClient().execute("send-email", { to: "a" }, call));
+  crash = false;
+  const resumed = await LineageGuardSession.resume(store, session.sessionId, { approvalVerifier, tools, toolExecutionStore: store });
+  await assert.rejects(resumed.getToolClient().execute("send-email", { to: "a" }, call));
+  await assert.rejects(resumed.getToolClient().execute("send-email", { to: "a" }, { ...call, idempotencyKey: "send:43" }));
+  assert.equal(sent, 1);
+});
+
+test("an agent's tool client stops working when its run ends", async () => {
+  let calls = 0;
+  const tools = [{ name: "post-update", action: "Post", sideEffect: false, execute: () => { calls += 1; return "posted"; } }];
+  const session = new LineageGuardSession({ tools }).recordSource("src", "Post a status update.");
+  let kept: { execute: (name: string, input: unknown) => Promise<unknown> } | null = null;
+  await session.runAgent({
+    id: "agent", name: "Agent",
+    execute: async ({ tools: client }) => {
+      kept = client;
+      await client.execute("post-update", {});
+      return "Post a status update.";
+    },
+  }, {});
+  assert.equal(calls, 1);
+  await assert.rejects(kept!.execute("post-update", {}), /ended with its run/);
+  assert.equal(calls, 1);
+});
+
+test("published source maps carry their sources", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const config = JSON.parse(await readFile(new URL("../sdk/tsconfig.build.json", import.meta.url), "utf8"));
+  assert.equal(config.compilerOptions.inlineSources, true);
+});
+
+test("OTel keeps a model's JSON answer whole, even with message-like keys", async () => {
+  const { runOtlpReliabilityPipeline } = await import("../sdk/otel.ts");
+  const trace = "b".repeat(32);
+  const messages = (role: string, text: string) =>
+    JSON.stringify([{ role, parts: [{ type: "text", content: text }] }]);
+  const payload = (answer: string) => ({
+    resourceSpans: [{ scopeSpans: [{ spans: [{
+      traceId: trace, spanId: "1".repeat(16), name: "planner", startTimeUnixNano: "1",
+      attributes: [
+        { key: "gen_ai.input.messages", value: { stringValue: messages("user", "Refund the customer 50 dollars.") } },
+        { key: "gen_ai.output.messages", value: { stringValue: messages("assistant", answer) } },
+      ],
+    }] }] }],
+  });
+  for (const answer of [
+    '{"message":"Refund the customer 50 dollars.","amount_dollars":5000}',
+    '{"type":"refund","amount_dollars":5000}',
+  ]) {
+    const run = runOtlpReliabilityPipeline(payload(answer));
+    assert.notEqual(run.firstBlockingEdgeId, null, answer);
+  }
+});
+
+test("deeply nested OTel JSON is not a stack overflow", async () => {
+  const { parseOtlpTracePayload } = await import("../sdk/otel.ts");
+  const deep = "[".repeat(200_000) + "]".repeat(200_000);
+  assert.doesNotThrow(() => {
+    try {
+      parseOtlpTracePayload({ resourceSpans: [{ scopeSpans: [{ spans: [{
+        traceId: "c".repeat(32), spanId: "2".repeat(16), name: "x", startTimeUnixNano: "1",
+        attributes: [
+          { key: "lineageguard.source", value: { stringValue: "A claim." } },
+          { key: "lineageguard.output", value: { stringValue: deep } },
+        ],
+      }] }] }] });
+    } catch (error) {
+      if (error instanceof RangeError) throw error;
+    }
+  });
+});

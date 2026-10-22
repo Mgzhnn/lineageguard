@@ -144,6 +144,14 @@ export type LineageGuardSessionOptions = {
    */
   semanticJudgeTimeoutMs?: number;
   tools?: readonly RegisteredTool[];
+  /**
+   * Where a snapshot is saved after a side-effect tool's approval token is
+   * consumed and its idempotency key reserved, and before the tool runs. A
+   * process that crashes during the tool and resumes from this store then
+   * refuses to reuse the token or re-run the key. Without it, the one-time
+   * ledger and idempotency records last only until the last checkpoint.
+   */
+  toolExecutionStore?: LineageGuardSnapshotStore;
   exposeSessionToAgents?: boolean;
   onEvent?: (event: RuntimeEvent) => void;
   onEventError?: (error: unknown, event: RuntimeEvent) => void;
@@ -252,6 +260,7 @@ export type LineageGuardRestoreOptions = Pick<
   | "semanticJudgeFailureMode"
   | "semanticJudgeTimeoutMs"
   | "tools"
+  | "toolExecutionStore"
   | "onEvent"
   | "onEventError"
   | "eventSinkFailureMode"
