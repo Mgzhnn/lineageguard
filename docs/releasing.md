@@ -62,11 +62,16 @@ Create the matching GitHub `npm` environment and, under its protection rules,
 add at least one **Required reviewer** and restrict deployment branches and
 tags to `v*.*.*`. Without a required reviewer, anyone who can push a `v*` tag
 publishes to npm within a minute with no human in the loop. The workflow also
-refuses a tag whose commit is not on `main`, verifies on the same Node.js as
-CI, runs the Node.js 20 floor check, then switches to Node.js 24 with npm 11
-(trusted publishing needs npm 11.5.1+ and Node.js 22.14+) and publishes
-prerelease tags (`-rc.1`) under the `next` dist-tag. It uses short-lived OIDC credentials and does not
-require an npm token.
+refuses a tag whose commit is not on `main`. Its `verify` job runs on the same
+Node.js as CI with no OIDC permission, packs the SDK once, runs the Node.js 20
+floor check (the Node download is checked against `SHASUMS256.txt`) and
+uploads that tarball. Only the `publish` job, gated by the `npm` environment,
+can mint OIDC credentials: it switches to Node.js 24 with npm pinned to
+11.19.0 (trusted publishing needs npm 11.5.1+ and Node.js 22.14+) and runs
+`npm publish` on the downloaded tarball, so the bytes on npm are the bytes
+that were verified and no lifecycle script runs while credentials exist.
+Prerelease tags (`-rc.1`) publish under the `next` dist-tag. It uses
+short-lived OIDC credentials and does not require an npm token.
 
 ## 5. Publish intentionally
 
@@ -79,7 +84,8 @@ git push origin v0.9.0
 ```
 
 The `publish.yml` workflow verifies the tag, package versions, security audit,
-application, SDK tarball, and examples before invoking `npm publish`. npm
+application, SDK tarball, and examples in its `verify` job, then publishes that
+job's tarball from the `publish` job. npm
 trusted publishing automatically records provenance for a public package from
 a public repository. Do not publish 0.9.0 until the 0.9.0 release commit is on
 the default branch; a registry version can never be reused.

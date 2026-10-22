@@ -5,19 +5,25 @@ on:
     tags:
       - "v*.*.*"
 
+# Two jobs. "verify" runs every check, packs the SDK once and uploads that
+# tarball; it has no id-token, so install scripts, the build and downloaded
+# tools there cannot mint npm credentials. "publish" alone can, and it
+# publishes the exact tarball that was verified: `npm publish <file>` runs no
+# lifecycle scripts, so nothing is rebuilt between the checks and npm
+# (2026-10-22 review).
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: npm-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  publish:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: npm
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
 
     steps:
       - name: Check out release commit
@@ -57,14 +63,49 @@ jobs:
       - name: Verify application and distributable SDK
         run: pnpm run verify
 
-      - name: Pack the SDK for the Node.js 20 floor check
-        run: pnpm --dir sdk pack --pack-destination "${{ runner.temp }}/sdk-pack"
+      - name: Pack the SDK once
+        id: pack
+        run: |
+          mkdir -p "${{ runner.temp }}/sdk-pack"
+          pnpm --dir sdk pack --pack-destination "${{ runner.temp }}/sdk-pack"
+          tarball="$(cd "${{ runner.temp }}/sdk-pack" && ls *.tgz)"
+          [ "$(echo "$tarball" | wc -l)" = 1 ] || { echo "::error::Expected one SDK tarball."; exit 1; }
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
 
       - name: Import the packed SDK on Node.js 20
         run: |
           NODE20="$(mktemp -d)"
-          curl -fsSL "https://nodejs.org/dist/v20.20.0/node-v20.20.0-linux-x64.tar.xz" | tar -xJ -C "$NODE20" --strip-components=1
+          cd "$NODE20"
+          curl -fsSLO "https://nodejs.org/dist/v20.20.0/node-v20.20.0-linux-x64.tar.xz"
+          curl -fsSLO "https://nodejs.org/dist/v20.20.0/SHASUMS256.txt"
+          grep " node-v20.20.0-linux-x64.tar.xz\$" SHASUMS256.txt | sha256sum -c -
+          tar -xJf node-v20.20.0-linux-x64.tar.xz --strip-components=1
+          cd "$GITHUB_WORKSPACE"
           "$NODE20/bin/node" scripts/smoke-packed-sdk.mjs "${{ runner.temp }}/sdk-pack"
+
+      - name: Keep the verified tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sdk-tarball
+          path: ${{ runner.temp }}/sdk-pack/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Fetch the verified tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sdk-tarball
+          path: sdk-pack
 
       # npm trusted publishing needs npm 11.5.1+ and Node.js 22.14+, which the
       # CI floor does not bundle. Verification above already ran on the floor.
@@ -75,17 +116,20 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
-      - name: Upgrade npm to a trusted-publishing release
+      - name: Pin npm to a trusted-publishing release
         run: |
-          npm install -g npm@11
+          npm install -g npm@11.19.0
           npm --version
 
-      - name: Publish with npm trusted publishing
-        working-directory: sdk
+      - name: Publish the verified tarball with npm trusted publishing
+        env:
+          # The leading ./ matters: without it npm reads "sdk-pack/x.tgz" as a
+          # GitHub user/repo shorthand.
+          TARBALL: ./sdk-pack/${{ needs.verify.outputs.tarball }}
         # Prerelease tags (v1.0.0-rc.1) must not become "latest".
         run: |
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
-            npm publish --access public --tag next
+            npm publish "$TARBALL" --access public --tag next
           else
-            npm publish --access public
+            npm publish "$TARBALL" --access public
           fi
