@@ -3,7 +3,7 @@
 :root {
   --ink: #f4f7fb;
   --muted: #8c98a9;
-  --quiet: #667184;
+  --quiet: #808b9e;
   --page: #080b10;
   --panel: #0d1118;
   --panel-raised: #121722;
@@ -497,7 +497,7 @@ a {
 
 .ingestion-strip > div:first-child > p {
   margin: 5px 0 0;
-  color: #596577;
+  color: #808b9e;
   font-size: 9px;
 }
 
@@ -524,6 +524,20 @@ a {
 .ingestion-strip button:hover {
   border-color: var(--cyan);
   color: var(--cyan);
+}
+
+/* An empty status line keeps its live region without taking space. */
+.status-empty {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The file input itself is clipped to 1px, so keyboard focus shows on its
+   label; without this a tab onto "Import trace JSON" showed nothing. */
+.ingestion-strip label:focus-within {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 
 .ingestion-strip input {
@@ -720,7 +734,7 @@ textarea {
   position: absolute;
   right: 10px;
   bottom: 33px;
-  color: #4e596a;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 8px;
   pointer-events: none;
@@ -888,7 +902,7 @@ textarea {
 }
 
 .pipeline-modules article > div span {
-  color: #586477;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 8px;
 }
@@ -909,7 +923,7 @@ textarea {
 }
 
 .pipeline-modules article small {
-  color: #69768a;
+  color: #808b9e;
   font-size: 8px;
   line-height: 1.5;
 }
@@ -1089,7 +1103,7 @@ textarea {
   gap: 7px;
   border: 0;
   background: none;
-  color: #5c687a;
+  color: #808b9e;
   text-align: left;
   position: relative;
 }
@@ -1121,7 +1135,7 @@ textarea {
 .replay-rail button small {
   z-index: 1;
   overflow: hidden;
-  color: #657185;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 7px;
   text-overflow: ellipsis;
@@ -1368,7 +1382,7 @@ textarea {
 
 .timeline-copy small {
   margin-top: 4px;
-  color: #586477;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 8px;
 }
@@ -1392,7 +1406,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #657185;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 8px;
   letter-spacing: 0.06em;
@@ -1454,7 +1468,7 @@ textarea {
 }
 
 .evidence-pair span {
-  color: #566174;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 7px;
   letter-spacing: 0.1em;
@@ -1479,7 +1493,7 @@ textarea {
 }
 
 .issue-review > span {
-  color: #526074;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 7px;
   letter-spacing: 0.09em;
@@ -1593,7 +1607,8 @@ textarea {
 .receipt-status {
   padding: 5px 7px;
   border: 1px solid #11151b;
-  background: var(--red);
+  /* A darker red than --red: white on #ff5d6c was 2.98:1. */
+  background: #be2f3c;
   color: white;
   font-size: 7px;
   font-weight: 800;
@@ -1856,7 +1871,7 @@ textarea {
 .recovery-actions li > div > small {
   margin-top: 6px;
   display: block;
-  color: #657185;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 7px;
 }
@@ -1951,7 +1966,7 @@ textarea {
 
 .integration-capabilities p {
   margin: 0;
-  color: #6d798c;
+  color: #808b9e;
   font-size: 10px;
   line-height: 1.55;
 }
@@ -1978,7 +1993,7 @@ textarea {
   display: flex;
   justify-content: space-between;
   border-bottom: 1px solid #283344;
-  color: #69768a;
+  color: #808b9e;
   font-family: var(--mono);
   font-size: 8px;
 }

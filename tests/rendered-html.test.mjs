@@ -284,7 +284,9 @@ test("health advertises the per-isolate limit with no-store and nosniff", async 
   assert.ok(!payload.capabilities.includes("per-tenant-rate-limit"));
 });
 
-test("the workspace live region is the one-line status only", async () => {
+// role="status" lines (import and action messages) are polite live regions
+// too; this checks only that aria-live is not spread over other panels.
+test("only the verdict line carries aria-live", async () => {
   const response = await render();
   const html = await response.text();
   const liveRegions = html.match(/aria-live="[^"]*"/g) ?? [];
@@ -311,4 +313,18 @@ test("example buttons expose their selection with aria-pressed", async () => {
     exampleButtons.filter((button) => button.includes('aria-pressed="true"')).length,
     1,
   );
+});
+
+test("both status lines exist before any message, so screen readers announce later text", async () => {
+  const response = await render();
+  const html = await response.text();
+  const statusLines = html.match(/<p class="status-empty" role="status"><\/p>/g) ?? [];
+  assert.equal(statusLines.length, 2);
+});
+
+test("replay buttons are named by their visible number and label", async () => {
+  const response = await render();
+  const html = await response.text();
+  assert.match(html, /<button aria-label="01 [^"]+" aria-pressed="(?:true|false)"[^>]*><span>01<\/span> <small>/);
+  assert.doesNotMatch(html, /aria-label="Show /);
 });
