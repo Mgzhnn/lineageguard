@@ -140,6 +140,8 @@ export function useLineageGuardWorkspace() {
     setSelectedExample("");
     setReviews({});
     setActionMessage("");
+    // "Imported …" describes a trace that was just edited away.
+    setImportMessage(null);
   }
 
   function updateGuardrail(value: string) {
@@ -218,7 +220,9 @@ export function useLineageGuardWorkspace() {
     setStages((current) => [
       ...current,
       {
-        id: `agent-${Date.now()}`,
+        // Two stages added in the same millisecond shared a Date.now() id and
+        // the next run threw "Duplicate stage id" (2026-10-22 review).
+        id: `agent-${crypto.randomUUID()}`,
         label: `Agent ${current.length}`,
         text: "",
       },
@@ -236,7 +240,17 @@ export function useLineageGuardWorkspace() {
   function runAnalysis() {
     importRevision.current += 1;
     setActionMessage("");
-    const nextPipeline = runReliabilityPipeline(stages, guardrail);
+    let nextPipeline: ReturnType<typeof runReliabilityPipeline>;
+    try {
+      nextPipeline = runReliabilityPipeline(stages, guardrail);
+    } catch (error) {
+      // An invalid trace used to throw out of the click handler with nothing
+      // on screen. Say why instead.
+      setActionMessage(
+        error instanceof Error ? `Could not run the pipeline: ${error.message}` : "Could not run the pipeline.",
+      );
+      return;
+    }
     const nextResult = nextPipeline.analysis;
     setPipelineRun(nextPipeline);
     setPipelineCursor(0);

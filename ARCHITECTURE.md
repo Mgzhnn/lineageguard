@@ -122,8 +122,13 @@ executor, it must expose middleware or receive wrapped tool functions. Reading
 Read-only tools are allowed by default. Side-effecting tools fail closed unless
 host policy explicitly allows them or `approvalVerifier` validates a scoped
 token. The verifier receives the session, run, tool, action, authenticated
-reviewer, and SHA-256 input fingerprint. Accepted tokens are consumed once.
-The legacy `approvedBy` string is not authorization.
+reviewer, and SHA-256 input fingerprint. Accepted tokens are consumed once
+within a session. Across a crash and resume, that holds only when the session
+has a `toolExecutionStore`: it saves the consumed token and the pending
+idempotency record before the side effect runs. Without one, the ledger lasts
+until the last checkpoint, and single use across restarts must be enforced by
+the approval service itself. The legacy `approvedBy` string is not
+authorization.
 
 Hosts can register tool implementations and give agents the restricted
 `GuardedToolClient`. The full session is not exposed to agent callbacks by

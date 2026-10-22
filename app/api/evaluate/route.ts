@@ -12,13 +12,6 @@ import {
   TracePayloadError,
 } from "@/lib/trace-schema";
 
-const severityRank: Record<Severity | "clean", number> = {
-  clean: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-};
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -132,19 +125,13 @@ export async function POST(request: Request) {
     }
 
     const trace = parseTracePayload(input);
-    const initialReport = runReliabilityPipeline(
-      trace.stages,
-      trace.guardrail,
-    );
-    const blockingTransitionIndex =
-      initialReport.analysis.transitions.findIndex(
-        (transition) =>
-          severityRank[transition.severity] >= severityRank[threshold],
-      );
-    const blocked = blockingTransitionIndex >= 0;
+    // One run: the pipeline finds the blocking transition at this threshold and
+    // builds the report and recovery around that same decision.
     const report = runReliabilityPipeline(trace.stages, trace.guardrail, {
-      recoveryTransitionIndex: blocked ? blockingTransitionIndex : null,
+      blockAtOrAbove: threshold,
     });
+    const blockingTransitionIndex = report.ruleFamilyAgreement.transitionIndex ?? -1;
+    const blocked = blockingTransitionIndex >= 0;
     const transition = blocked
       ? report.analysis.transitions[blockingTransitionIndex]
       : report.analysis.transitions.at(-1) ?? null;

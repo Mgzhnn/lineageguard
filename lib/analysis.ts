@@ -105,14 +105,23 @@ const certaintyTerms: RankedTerm[] = [
   { term: "appears", rank: 0 },
   { term: "suggests", rank: 0 },
   { term: "suggested", rank: 0 },
+  // Base forms and their kin: "Early data suggest …" and "Studies prove …"
+  // were invisible with only the third-person forms listed (2026-10-22 review).
+  { term: "suggest", rank: 0 },
+  { term: "seem", rank: 0 },
+  { term: "seems", rank: 0 },
+  { term: "seemed", rank: 0 },
+  { term: "appear", rank: 0 },
   { term: "appeared", rank: 0 },
   { term: "estimated", rank: 0 },
   { term: "approximately", rank: 0 },
   { term: "likely", rank: 1 },
+  { term: "probably", rank: 1 },
   { term: "indicates", rank: 1 },
   { term: "indicated", rank: 1 },
   { term: "supports", rank: 1 },
   { term: "expected", rank: 1 },
+  { term: "show", rank: 2 },
   { term: "shows", rank: 2 },
   { term: "showed", rank: 2 },
   { term: "shown", rank: 2 },
@@ -120,6 +129,7 @@ const certaintyTerms: RankedTerm[] = [
   { term: "demonstrated", rank: 2 },
   { term: "will", rank: 2 },
   { term: "confirmed", rank: 3 },
+  { term: "prove", rank: 3 },
   { term: "proves", rank: 3 },
   { term: "proved", rank: 3 },
   { term: "proven", rank: 3 },
@@ -197,9 +207,14 @@ export const ISSUE_FAMILY: Record<IssueType, IssueFamily> = {
 };
 
 function normalize(text: string) {
+  // NFKC folds full-width letters ("ｃｏｎｆｉｒｍｅｄ"), and format characters
+  // such as a zero-width space ("con\u200Bfirmed") are removed, so neither can
+  // hide a term (2026-10-22 review).
   return text
+    .normalize("NFKC")
+    .replace(/\p{Cf}/gu, "")
     .toLowerCase()
-    .replace(/[’]/g, "'")
+    .replace(/[’‘ʼ＇]/g, "'")
     .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
@@ -240,41 +255,73 @@ function findTermIndexes(text: string, term: string): number[] {
     .filter((index) => index >= 0);
 }
 
-function hasUncertaintyHedgeInClause(
-  text: string,
+const sentenceEndPattern = /[.!?;]/g;
+const contrastBoundaryGlobal =
+  /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b/gi;
+const uncertaintyHedgePattern =
+  /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appear|appears|appeared|suggest|suggests|suggested|seem|seems|seemed|estimated|approximately|likely|probably)\b/gi;
+
+type HedgeIndex = {
+  sentenceEnds: number[];
+  hedgeStarts: number[];
+  hedgeEnds: number[];
+  contrasts: number[];
+  commas: number[];
+};
+
+function buildHedgeIndex(text: string): HedgeIndex {
+  const positions = (pattern: RegExp) => [...text.matchAll(pattern)].map((m) => m.index ?? 0);
+  const hedges = [...text.matchAll(uncertaintyHedgePattern)];
+  return {
+    sentenceEnds: positions(sentenceEndPattern),
+    hedgeStarts: hedges.map((m) => m.index ?? 0),
+    hedgeEnds: hedges.map((m) => (m.index ?? 0) + m[0].length),
+    contrasts: positions(contrastBoundaryGlobal),
+    commas: positions(/,/g),
+  };
+}
+
+/** Whether a sorted position list has an element in [from, to). */
+function anyIn(sorted: readonly number[], from: number, to: number) {
+  const at = lowerBound(sorted, from);
+  return at < sorted.length && sorted[at] < to;
+}
+
+// Whether a hedge in the strong term's sentence qualifies it: no contrast word
+// ("but", "while", ...) between them, and, for a hedge after the term, no comma
+// (a trailing comma clause qualifies itself). Positions are found once per text;
+// rescanning the sentence for every strong term was quadratic on a long stage
+// without full stops: 38 s at 200 KB (2026-10-22 review). Only the nearest hedge
+// on each side needs checking, since a farther one has the same contrast word or
+// comma between it and the term.
+function hasIndexedHedgeInClause(
+  index: HedgeIndex,
+  textLength: number,
   strongTermIndex: number,
   strongTermLength: number,
 ) {
-  const before = text.slice(0, strongTermIndex);
-  const clauseStart =
-    Math.max(
-      before.lastIndexOf("."),
-      before.lastIndexOf("!"),
-      before.lastIndexOf("?"),
-      before.lastIndexOf(";"),
-    ) + 1;
-  const after = text.slice(strongTermIndex + strongTermLength);
-  const nextBoundary = after.search(/[.!?;]/);
-  const clauseEnd =
-    nextBoundary === -1
-      ? text.length
-      : strongTermIndex + strongTermLength + nextBoundary;
-  const clause = text.slice(clauseStart, clauseEnd);
-  const strongOffset = strongTermIndex - clauseStart;
-  const contrastBoundary =
-    /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b/i;
-  const hedgePattern =
-    /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appears|appeared|suggests|suggested|estimated|approximately|likely)\b/gi;
-  const hedges = [...clause.matchAll(hedgePattern)];
-  for (const hedge of hedges) {
-    if (hedge.index === undefined) continue;
-    const hedgeStart = hedge.index;
-    const hedgeEnd = hedgeStart + hedge[0].length;
-    const between =
-      hedgeStart < strongOffset
-        ? clause.slice(hedgeEnd, strongOffset)
-        : clause.slice(strongOffset + strongTermLength, hedgeStart);
-    if (!contrastBoundary.test(between)) return true;
+  const strongEnd = strongTermIndex + strongTermLength;
+  const previousEnd = lowerBound(index.sentenceEnds, strongTermIndex) - 1;
+  const clauseStart = previousEnd >= 0 ? index.sentenceEnds[previousEnd] + 1 : 0;
+  const nextEnd = lowerBound(index.sentenceEnds, strongEnd);
+  const clauseEnd = nextEnd < index.sentenceEnds.length ? index.sentenceEnds[nextEnd] : textLength;
+
+  const before = lowerBound(index.hedgeStarts, strongTermIndex) - 1;
+  if (
+    before >= 0 &&
+    index.hedgeStarts[before] >= clauseStart &&
+    !anyIn(index.contrasts, index.hedgeEnds[before], strongTermIndex)
+  ) {
+    return true;
+  }
+  const after = lowerBound(index.hedgeStarts, strongEnd);
+  if (
+    after < index.hedgeStarts.length &&
+    index.hedgeEnds[after] <= clauseEnd &&
+    !anyIn(index.commas, strongEnd, index.hedgeStarts[after]) &&
+    !anyIn(index.contrasts, strongEnd, index.hedgeStarts[after])
+  ) {
+    return true;
   }
   return false;
 }
@@ -287,6 +334,7 @@ function findTerms(
   // Complete dates are blanked first so the month "May" is never read as a
   // hedge; "may 24" without a year is excluded by the digit check below.
   const normalized = normalize(extractDateClaims(text).remaining);
+  let hedgeIndex: HedgeIndex | null = null;
   return terms.filter(({ term, rank }) =>
     findTermIndexes(normalized, term).some((matchIndex) => {
       const prefix = normalized.slice(Math.max(0, matchIndex - 24), matchIndex);
@@ -301,7 +349,12 @@ function findTerms(
       if (
         scopeStrongTermsWithUncertainty &&
         rank >= 2 &&
-        hasUncertaintyHedgeInClause(normalized, matchIndex, term.length)
+        hasIndexedHedgeInClause(
+          (hedgeIndex ??= buildHedgeIndex(normalized)),
+          normalized.length,
+          matchIndex,
+          term.length,
+        )
       ) {
         return false;
       }
@@ -438,17 +491,24 @@ const metricUnitFactors: Record<string, { factor: number; base: string }> = {
 const measurableNouns =
   "seconds?|minutes?|hours?|days?|weeks?|months?|years?|people|users?|customers?|cases?|degrees?";
 
+// Spelled units that sit after a space ("5 miles") are listed; any other
+// letters attached to the digits ("30x", "40ms", "12th", "5°C") are kept as the
+// unit by the pattern below. Both used to be cut off, so "30x -> 35x" read as
+// 3 -> 3 and "5 miles -> 5 feet" as no number at all (2026-10-22 review).
 const numberUnitAlternation =
+  "miles?|feet|foot|ft|inches|inch|yards?|mph|kph|°c|°f|gb|mb|kb|tb|ms|am|pm|" +
   "%|percent|percentage points?|milligrams?|kilograms?|grams?|milliliters?|millilitres?|liters?|litres?|kilometers?|kilometres?|centimeters?|centimetres?|millimeters?|millimetres?|meters?|metres?|mg|kg|km|ml|cl|cm|mm|g|l|k|m|b|thousand|million|billion|" +
   measurableNouns;
 
 // The trailing lookahead blocks partial unit matches ("500 gallons" must not
 // read as 500g).
+// The closing lookahead also refuses a digit, comma-digit or point-digit next:
+// with only (?![a-z%]) the engine backtracked "30x" to the number 3.
 const numberPattern = new RegExp(
-  "(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)" +
-    `(?:\\s*(?:${numberUnitAlternation}))?` +
+  "(?:[≤≥<>]\\s*)?(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)" +
+    `(?:\\s*(?:${numberUnitAlternation})(?![a-z])|[a-zµμ°]+)?` +
     "(?:\\s*(?:-|–|—|to)\\s*(?:[+-]?[$€£₩]\\s*|[$€£₩]?[+-]?)(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)" +
-    `(?:\\s*(?:${numberUnitAlternation}))?)?(?![a-z%])`,
+    `(?:\\s*(?:${numberUnitAlternation})(?![a-z])|[a-zµμ°]+)?)?(?![a-z%\\d]|[.,]\\d)`,
   "gi",
 );
 
@@ -507,7 +567,10 @@ function canonicalizeQuantitySide(side: string): string {
   let decimalPower = 0;
   let unit = (parsed[3] ?? "").trim();
 
-  if (unit === "thousand" || unit === "k") {
+  if (unit === "bn") {
+    decimalPower = 9;
+    unit = "";
+  } else if (unit === "thousand" || unit === "k") {
     decimalPower = 3;
     unit = "";
   } else if (unit === "million" || (unit === "m" && currency)) {
@@ -531,7 +594,15 @@ function canonicalizeQuantitySide(side: string): string {
 }
 
 function canonicalizeQuantityToken(raw: string): string {
+  // A comparator is part of the claim: "up to 40%" is not "40%".
+  const bound = /^\s*([≤≥<>])\s*/.exec(raw);
+  if (bound) return bound[1] + canonicalizeQuantityToken(raw.slice(bound[0].length));
   const token = normalize(raw)
+    // Commas: thousands groups go, a decimal comma ("1,5 mg") becomes a point,
+    // and anything left over (a list comma) is dropped. Stripping every comma
+    // read "1,5 mg" as 15 mg (2026-10-22 review).
+    .replace(/(\d),(?=\d{3}(?!\d))/g, "$1")
+    .replace(/(\d),(\d)/g, "$1.$2")
     .replace(/,/g, "")
     .replace(/\bpercentage points?\b/g, "pp")
     .replace(/\bpercent\b/g, "%")
@@ -572,8 +643,16 @@ function extractNumberClaims(text: string) {
     .replace(/[−－]/g, "-").replace(/＋/g, "+").replace(/％/g, "%");
   const { dates, remaining: dated } = extractDateClaims(numericText);
   // Rewrites that mean the same number: "between 12% and 18%" is the range
-  // 12–18%, and "5,000 dollars" is $5,000.
+  // 12–18%, and "5,000 dollars" is $5,000. Bounds stay attached to their
+  // number, and a capital M/B/K after digits is a multiplier, not metres.
   const remaining = dated
+    .replace(/\b(up to|at most|no more than|a maximum of)\s+(?=[$€£₩]?[+-]?\d)/gi, "≤")
+    .replace(/\b(at least|no less than|no fewer than|a minimum of)\s+(?=[$€£₩]?[+-]?\d)/gi, "≥")
+    .replace(/\b(less than|fewer than|below)\s+(?=[$€£₩]?[+-]?\d)/gi, "<")
+    .replace(/\b(more than|greater than|above)\s+(?=[$€£₩]?[+-]?\d)/gi, ">")
+    .replace(/(\d)\s?M\b/g, "$1 million")
+    .replace(/(\d)\s?B\b/g, "$1 billion")
+    .replace(/(\d)\s?K\b/g, "$1 thousand")
     .replace(
       /\bbetween\s+([$€£₩]?[+-]?\d[^\s]*)\s+and\s+(?=[$€£₩]?[+-]?\d)/gi,
       "$1 to ",
@@ -590,6 +669,28 @@ function extractNumberClaims(text: string) {
     .filter(Boolean);
   const wordClaims = extractWordNumberClaims(remaining);
   return unique([...dates, ...digitClaims, ...wordClaims]);
+}
+
+// The word a negation applies to: "not safe" -> safe, "never approved" ->
+// approved. Only a negated word the earlier stage stated positively is a
+// flipped claim. An action verb is left out: "not sent" reports an action's
+// status, which the guardrail check covers, and "ready but not sent" is the
+// safe outcome rather than a reversal.
+const negationTargetPattern =
+  /\b(?:not|no|never|cannot|\w+n't)\s+(?:(?:yet|been|be|being|fully|currently|at all|really|a|an|the|any)\s+){0,2}([a-z][a-z-]+)/gi;
+
+const completedActionWordPattern = new RegExp(
+  `^${completedActionPattern.source.replace(/\\b/g, "")}$`,
+  "i",
+);
+
+function negatedSourceWords(fromText: string, toText: string) {
+  const source = normalize(fromText);
+  const targets = [...normalize(toText).matchAll(negationTargetPattern)]
+    .map((match) => match[1])
+    .filter((word) => !completedActionWordPattern.test(word))
+    .filter((word) => findTermIndex(source, word) >= 0);
+  return unique(targets);
 }
 
 function extractNegations(text: string) {
@@ -655,24 +756,52 @@ type CompletedActionContext = {
   label: string;
 };
 
+// Boundary positions are found once per text and pattern. clauseAround used
+// to rescan from the start of the text for every action verb, which made a
+// long stage of repeated verbs quadratic: 93 s at 400 KB (2026-10-22 review).
+const boundaryCache = new Map<RegExp, { text: string; starts: number[]; ends: number[] }>();
+
+function boundaryPositions(text: string, boundary: RegExp) {
+  const cached = boundaryCache.get(boundary);
+  if (cached && cached.text === text) return cached;
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (const match of text.matchAll(boundary)) {
+    starts.push(match.index ?? 0);
+    ends.push((match.index ?? 0) + match[0].length);
+  }
+  const positions = { text, starts, ends };
+  boundaryCache.set(boundary, positions);
+  return positions;
+}
+
+/** Index of the first element >= value in a sorted array (its length if none). */
+function lowerBound(sorted: readonly number[], value: number) {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (sorted[middle] < value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 function clauseAround(
   text: string,
   index: number,
   length: number,
   boundary: RegExp,
 ) {
-  let start = 0;
-  let end = text.length;
-  for (const match of text.matchAll(boundary)) {
-    const matchIndex = match.index ?? 0;
-    if (matchIndex + match[0].length <= index) {
-      start = matchIndex + match[0].length;
-    } else if (matchIndex >= index + length) {
-      end = matchIndex;
-      break;
-    }
-  }
-  return { start, end };
+  const { starts, ends } = boundaryPositions(text, boundary);
+  // The last boundary that ends at or before the term, and the first that
+  // starts at or after its end; a boundary overlapping the term is skipped.
+  const before = lowerBound(ends, index + 1) - 1;
+  const after = lowerBound(starts, index + length);
+  return {
+    start: before >= 0 ? ends[before] : 0,
+    end: after < starts.length ? starts[after] : text.length,
+  };
 }
 
 function isAgentiveCompletedAction(
@@ -1022,7 +1151,9 @@ function analyzeTransition(
 
   if (
     beforeCertainty &&
-    beforeCertainty.rank === 0 &&
+    // Rank 1 too: "probably caused" -> "caused" drops a hedge as surely as
+    // "may have caused" does (2026-10-22 review).
+    beforeCertainty.rank <= 1 &&
     !afterCertainty &&
     !keepsVerificationRequirement(to.text) &&
     restatesClaim(from.text, to.text)
@@ -1105,6 +1236,27 @@ function analyzeTransition(
       ),
     );
   }
+  // The reverse flip: the claim is restated with a negation it did not have
+  // ("is safe" -> "is not safe"). Only the disappearance used to be checked
+  // (2026-10-22 review).
+  const flipped = !beforeNegations.length ? negatedSourceWords(from.text, to.text) : [];
+  if (flipped.length && restatesClaim(from.text, to.text)) {
+    issues.push(
+      makeIssue(
+        "negation",
+        "high",
+        transitionIndex,
+        from,
+        to,
+        "A negation was added",
+        `The next handoff restates the claim with ${afterNegations
+          .map((term) => `“${term}”`)
+          .join(", ")} in front of “${flipped.join("”, “")}”, which the earlier handoff stated without it. The claim may now say the opposite.`,
+        [],
+        afterNegations,
+      ),
+    );
+  }
 
   return issues;
 }
@@ -1119,6 +1271,7 @@ function analyzeGuardrail(
   const importantWords = importantGuardrailWords(guardrail);
   const expectsBlockedAction = guardedActionPattern.test(normalizedGuardrail);
   const issues: LineageIssue[] = [];
+  let dropReported = false;
 
   for (let stageIndex = 1; stageIndex < stages.length; stageIndex += 1) {
     const current = stages[stageIndex];
@@ -1160,10 +1313,15 @@ function analyzeGuardrail(
     }
 
     if (
+      !dropReported &&
       importantWords.length >= 2 &&
       previousRetention >= 0.3 &&
       retention < 0.3
     ) {
+      // Keep looking after a dropped guardrail: a later stage that then
+      // completes the protected action is the high finding, and stopping
+      // here reported only the medium one (2026-10-22 review).
+      dropReported = true;
       issues.push(
         makeIssue(
           "guardrail",
@@ -1179,7 +1337,6 @@ function analyzeGuardrail(
           retainedWords,
         ),
       );
-      break;
     }
   }
 
@@ -1208,35 +1365,53 @@ const englishFunctionWords = new Set([
 const MIN_WORDS_FOR_FUNCTION_WORD_CHECK = 6;
 const MIN_ENGLISH_FUNCTION_WORD_RATIO = 0.08;
 
-function analyzeCoverage(stages: TraceStage[]): LineageIssue[] {
+function outsideCoverage(text: string): boolean {
+  const letters = text.match(/\p{L}/gu) ?? [];
+  if (letters.length < MIN_LETTERS_FOR_COVERAGE_CHECK) return false;
+  const covered = letters.filter((letter) =>
+    coveredScriptPattern.test(letter),
+  ).length;
+  if (covered / letters.length < MIN_COVERED_LETTER_RATIO) return true;
+  const words = normalize(text).match(/\p{L}[\p{L}']*/gu) ?? [];
+  if (words.length < MIN_WORDS_FOR_FUNCTION_WORD_CHECK) return false;
+  const functionWords = words.filter((word) =>
+    englishFunctionWords.has(word),
+  ).length;
+  return functionWords / words.length < MIN_ENGLISH_FUNCTION_WORD_RATIO;
+}
+
+function analyzeCoverage(stages: TraceStage[], guardrail = ""): LineageIssue[] {
   if (stages.length < 2) return [];
   const uncoveredStageIndexes: number[] = [];
   stages.forEach((stage, index) => {
-    const letters = stage.text.match(/\p{L}/gu) ?? [];
-    if (letters.length < MIN_LETTERS_FOR_COVERAGE_CHECK) return;
-    const covered = letters.filter((letter) =>
-      coveredScriptPattern.test(letter),
-    ).length;
-    if (covered / letters.length < MIN_COVERED_LETTER_RATIO) {
-      uncoveredStageIndexes.push(index);
-      return;
-    }
-    const words = normalize(stage.text).match(/\p{L}[\p{L}']*/gu) ?? [];
-    if (words.length < MIN_WORDS_FOR_FUNCTION_WORD_CHECK) return;
-    const functionWords = words.filter((word) =>
-      englishFunctionWords.has(word),
-    ).length;
-    if (functionWords / words.length < MIN_ENGLISH_FUNCTION_WORD_RATIO) {
-      uncoveredStageIndexes.push(index);
-    }
+    if (outsideCoverage(stage.text)) uncoveredStageIndexes.push(index);
   });
-  if (!uncoveredStageIndexes.length) return [];
+  const issues: LineageIssue[] = [];
+  // A guardrail in another language is matched by nothing in the English
+  // lexicons, so every action check passed silently (2026-10-22 review).
+  if (guardrail.trim() && outsideCoverage(guardrail)) {
+    issues.push(
+      makeIssue(
+        "coverage",
+        "low",
+        0,
+        stages[0],
+        stages[1],
+        "Guardrail language outside detector coverage",
+        "The guardrail is mostly written in a language the built-in authority rules do not cover, so a protected action can pass without a finding. Write the guardrail in English, use semantic mode, or add a domain rule.",
+        [],
+        [],
+      ),
+    );
+  }
+  if (!uncoveredStageIndexes.length) return issues;
 
   const transitionIndex = Math.max(0, uncoveredStageIndexes[0] - 1);
   const labels = uncoveredStageIndexes
     .map((index) => stages[index].label)
     .join(", ");
   return [
+    ...issues,
     makeIssue(
       "coverage",
       "low",
@@ -1313,7 +1488,7 @@ export function analyzeLineage(
 
   if (includeBuiltInRules) {
     issues.push(...analyzeGuardrail(guardrail, usableStages));
-    issues.push(...analyzeCoverage(usableStages));
+    issues.push(...analyzeCoverage(usableStages, guardrail));
   }
   issues.sort(
     (a, b) =>

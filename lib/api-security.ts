@@ -23,6 +23,11 @@ type RateWindow = {
 const rateWindows = new Map<string, RateWindow>();
 const WINDOW_MILLISECONDS = 60_000;
 const DEFAULT_REQUESTS_PER_WINDOW = 60;
+// Wrong credentials per caller and claimed tenant per window. The quota above
+// only counted authenticated requests, so a thousand bearer guesses in one
+// window all reached the comparison (2026-10-22 review).
+const MAX_AUTH_FAILURES_PER_WINDOW = 10;
+const authFailureWindows = new Map<string, { startedAt: number; count: number }>();
 
 function isLoopbackHostname(hostname: string) {
   return (
@@ -193,15 +198,54 @@ function applyRateLimit(tenantId: string, now: number): EvaluationAccess {
   };
 }
 
+function authFailureKey(request: Request) {
+  const caller = request.headers.get("cf-connecting-ip")?.trim() || "unknown";
+  const tenant = request.headers.get("x-lineageguard-tenant")?.trim() || "-";
+  return `${caller}|${tenant.slice(0, 200)}`;
+}
+
+function liveFailureWindow(key: string, now: number) {
+  const window = authFailureWindows.get(key);
+  return window && now - window.startedAt < WINDOW_MILLISECONDS ? window : null;
+}
+
+function recordAuthFailure(key: string, now: number) {
+  const window = liveFailureWindow(key, now) ?? { startedAt: now, count: 0 };
+  window.count += 1;
+  authFailureWindows.set(key, window);
+  if (authFailureWindows.size > 1_000) {
+    for (const [candidateKey, candidate] of authFailureWindows) {
+      if (now - candidate.startedAt >= WINDOW_MILLISECONDS) authFailureWindows.delete(candidateKey);
+    }
+  }
+}
+
 export function authorizeEvaluationRequest(
   request: Request,
   now = Date.now(),
 ): EvaluationAccess {
+  const failureKey = authFailureKey(request);
+  const failures = liveFailureWindow(failureKey, now);
+  if (failures && failures.count >= MAX_AUTH_FAILURES_PER_WINDOW) {
+    return {
+      ok: false,
+      status: 429,
+      error: "Too many failed authentication attempts.",
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((failures.startedAt + WINDOW_MILLISECONDS - now) / 1_000),
+      ),
+    };
+  }
   const authentication = authenticateTenant(request);
-  if (!authentication.ok) return authentication;
+  if (!authentication.ok) {
+    if (authentication.status === 401) recordAuthFailure(failureKey, now);
+    return authentication;
+  }
   return applyRateLimit(authentication.tenantId, now);
 }
 
 export function resetEvaluationRateLimits() {
   rateWindows.clear();
+  authFailureWindows.clear();
 }

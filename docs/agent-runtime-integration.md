@@ -169,7 +169,8 @@ Await active agent/handoff calls, tool executions, and approval preflights befor
 checkpointing. Pending operations make snapshot creation fail explicitly; the
 snapshot cannot safely represent unfinished callbacks or in-flight reservations.
 Do not run agent/handoff calls concurrently on one session. Agents may still call
-registered tools during their own execution.
+registered tools during their own execution; the tool client an agent receives
+stops working when its run ends.
 
 ## Protect tools before execution
 
@@ -213,7 +214,11 @@ incorrect `sideEffect: false` declaration.
 
 The verifier receives the session id, run id, tool name, action, SHA-256 input
 fingerprint, token, and reviewer. It should validate expiry, reviewer identity,
-scope, and revocation. Tokens are consumed once after authorization.
+scope, and revocation. Tokens are consumed once after authorization. Set
+`toolExecutionStore` on the session (and pass it again to `resume()`) so the
+consumed token and the pending idempotency record are saved before each
+side-effect tool runs; otherwise a crash during the tool can be resumed from an
+earlier checkpoint that predates the consumption.
 
 The verifier may return a boolean or `Promise<boolean>`. Tool execution awaits
 asynchronous verification and reserves the token while verification is pending,

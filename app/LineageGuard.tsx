@@ -196,18 +196,20 @@ export default function LineageGuard() {
                   Import pasted JSON
                 </button>
               </div>
-              {importMessage && (
-                <p
-                  className={
-                    importMessage.tone === "error"
+              {/* Always rendered: several screen readers do not announce a
+                  live region that appears already holding its text. */}
+              <p
+                className={
+                  !importMessage
+                    ? "status-empty"
+                    : importMessage.tone === "error"
                       ? "import-error"
                       : "import-success"
-                  }
-                  role="status"
-                >
-                  {importMessage.text}
-                </p>
-              )}
+                }
+                role="status"
+              >
+                {importMessage?.text ?? ""}
+              </p>
             </div>
 
             <div className="guardrail-field">
@@ -399,7 +401,9 @@ export default function LineageGuard() {
                     index > result.firstMutationIndex + 1;
                   return (
                     <button
-                      aria-label={`Show ${stage.label}${isBroken ? ": first break" : isPastBreak ? ": downstream of first break" : ""}`}
+                      // The accessible name starts with the visible text
+                      // ("01 Research agent") so speech control can target it.
+                      aria-label={`${String(index + 1).padStart(2, "0")} ${stage.label || `Stage ${index + 1}`}${isBroken ? ": first break" : isPastBreak ? ": downstream of first break" : ""}`}
                       aria-pressed={replayIndex === index}
                       className={`${replayIndex === index ? "active" : ""} ${
                         isBroken ? "break" : ""
@@ -411,7 +415,7 @@ export default function LineageGuard() {
                       }}
                       type="button"
                     >
-                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <span>{String(index + 1).padStart(2, "0")}</span>{" "}
                       <small>{stage.label || `Stage ${index + 1}`}</small>
                     </button>
                   );
@@ -792,7 +796,9 @@ export default function LineageGuard() {
               )}
             </section>
 
-            {actionMessage && <p role="status">{actionMessage}</p>}
+            <p className={actionMessage ? undefined : "status-empty"} role="status">
+              {actionMessage}
+            </p>
             <div className="report-actions">
               <button disabled={!isFresh} onClick={copyReport} type="button">
                 {copyState === "copied" ? "Copied" : "Copy report"}

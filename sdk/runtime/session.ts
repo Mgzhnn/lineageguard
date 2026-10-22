@@ -109,6 +109,15 @@ export class LineageGuardSession {
     this.onEvent = config.onEvent;
     this.onEventError = config.onEventError;
     this.eventSinkFailureMode = config.eventSinkFailureMode;
+    const toolExecutionStore = options.toolExecutionStore;
+    if (
+      toolExecutionStore !== undefined &&
+      (typeof toolExecutionStore !== "object" ||
+        toolExecutionStore === null ||
+        typeof toolExecutionStore.save !== "function")
+    ) {
+      throw new Error("toolExecutionStore needs a save(snapshot) function.");
+    }
     this.toolGate = new ToolGate({
       sessionId: this.sessionId,
       toolPolicy: this.toolPolicy,
@@ -118,6 +127,9 @@ export class LineageGuardSession {
       revision: () => this.revision,
       currentRunId: () => this.getReport().id,
       emit: (type, message) => this.emit(type, message),
+      beforeSideEffect: toolExecutionStore
+        ? () => toolExecutionStore.save(this.reservationSnapshot())
+        : undefined,
     });
     config.tools.forEach((tool) => this.registerTool(tool));
   }
@@ -319,14 +331,34 @@ export class LineageGuardSession {
     this.assertRunnable();
     this.agentInProgress = true;
     const input = this.lastStage().text;
+    // The agent gets a client that works for this run only. One shared client
+    // stayed usable after the agent finished, so a reference the agent kept
+    // could run tools later, outside any agent run (2026-10-22 review).
+    const sessionTools = this.getToolClient();
+    let runActive = true;
+    const tools: GuardedToolClient = Object.freeze({
+      execute: <TInput, TResult>(
+        toolName: string,
+        toolInput: TInput,
+        options?: RegisteredToolExecutionOptions,
+      ) =>
+        runActive
+          ? sessionTools.execute<TInput, TResult>(toolName, toolInput, options)
+          : Promise.reject(
+              new Error(
+                `${agent.name}'s tool client ended with its run; tools can only be called during the agent's own execution.`,
+              ),
+            ),
+    });
     try {
       this.emit("agent-started", `${agent.name} started.`, agent.id);
       const output = await agent.execute({
         input,
         context,
         guard: this.exposeSessionToAgents ? this : undefined,
-        tools: this.getToolClient(),
+        tools,
       });
+      runActive = false;
       return await this.inspectHandoffSerial(agent.id, agent.name, output);
     } catch (error) {
       this.emit(
@@ -336,6 +368,7 @@ export class LineageGuardSession {
       );
       throw error;
     } finally {
+      runActive = false;
       this.agentInProgress = false;
     }
   }
@@ -443,6 +476,23 @@ export class LineageGuardSession {
     if (this.agentInProgress || this.handoffInProgress || this.toolGate.isBusy()) {
       throw new Error("Cannot snapshot while an operation is in progress; await completion first.");
     }
+    return this.currentSnapshot();
+  }
+
+  /**
+   * The snapshot saved just before a side-effect tool runs. A tool may run
+   * inside an agent and beside other tools, so only a handoff in progress
+   * (which rewrites the stages) stops it; in-flight tool records are saved as
+   * pending, which a restored session refuses to run again.
+   */
+  private reservationSnapshot(): LineageGuardSessionSnapshot {
+    if (this.handoffInProgress) {
+      throw new Error("Cannot save a tool reservation while a handoff is being inspected.");
+    }
+    return this.currentSnapshot();
+  }
+
+  private currentSnapshot(): LineageGuardSessionSnapshot {
     const restartStageIndex = this.frozen
       ? this.getReport().recovery.restartStageIndex
       : null;
@@ -496,6 +546,7 @@ export class LineageGuardSession {
       semanticJudgeFailureMode: options.semanticJudgeFailureMode,
       semanticJudgeTimeoutMs: options.semanticJudgeTimeoutMs,
       tools: options.tools,
+      toolExecutionStore: options.toolExecutionStore,
       onEvent: options.onEvent,
       onEventError: options.onEventError,
       eventSinkFailureMode: options.eventSinkFailureMode,
