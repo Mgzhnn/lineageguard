@@ -4,22 +4,33 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    # At most one PR per group below (react, production, development).
+    open-pull-requests-limit: 3
     groups:
       # React must move together: a react bump without react-dom fails the
-      # build (see Mgzhnn/lineageguard#20).
+      # build (see Mgzhnn/lineageguard#20). react-server-dom-webpack and the
+      # React type packages follow the same release line, so they ride along.
       react:
         patterns:
           - "react"
           - "react-dom"
+          - "react-server-dom-webpack"
           - "@types/react"
           - "@types/react-dom"
+      production-dependencies:
+        dependency-type: production
+        exclude-patterns:
+          - "react"
+          - "react-dom"
       development-dependencies:
         dependency-type: development
         exclude-patterns:
-          - "react*"
-          - "@types/react*"
-          - "vinext"
-          - "@types/node"
+          - "react-server-dom-webpack"
+          - "@types/react"
+          - "@types/react-dom"
     ignore:
       # vinext carries a committed patch (patches/vinext.patch) that Dependabot
       # cannot regenerate, so every automated bump fails pnpm install. Bump it
@@ -33,3 +44,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns:
+          - "*"
