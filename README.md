@@ -348,6 +348,9 @@ dispatcher) or `LINEAGEGUARD_API_KEYS_JSON` plus `x-lineageguard-tenant` and a
 bearer token. `LINEAGEGUARD_RATE_LIMIT_PER_MINUTE` sets a per-isolate
 (per-worker) safety valve, not a quota: each isolate counts requests
 independently, so the effective ceiling scales with the number of workers.
+Wrong credentials are limited separately: after 10 failed attempts in a
+minute for one caller and tenant id, further attempts get 429 until the
+window ends.
 
 Tool execution should still be wrapped locally in the host process: once an
 opaque framework has already executed a tool, no external monitor can undo it.

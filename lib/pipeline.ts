@@ -91,8 +91,20 @@ export type ReliabilityPipelineRun = {
 
 export type ReliabilityPipelineOptions = {
   recoveryTransitionIndex?: number | null;
+  /**
+   * Block at the first transition at or above this severity and plan recovery
+   * there, in the same run. Ignored when recoveryTransitionIndex is given.
+   */
+  blockAtOrAbove?: Severity;
   rules?: readonly CustomLineageRule[];
   includeBuiltInRules?: boolean;
+};
+
+const severityOrder: Record<Severity | "clean", number> = {
+  clean: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
 };
 
 function unique<T>(items: T[]) {
@@ -241,10 +253,26 @@ export function runReliabilityPipeline(
     rules: options.rules,
     includeBuiltInRules: options.includeBuiltInRules,
   });
-  const firstBreakDestination =
-    analysis.firstMutationIndex === null
-      ? null
-      : analysis.firstMutationIndex + 1;
+  // The transition the run treats as the break. With a blocking threshold or an
+  // explicit recovery index it is that decision, not simply the first issue of
+  // any severity: the API used to block at one transition while the same
+  // response marked an earlier, below-threshold one as the first break
+  // (2026-10-22 review).
+  let recoveryTransitionIndex = options.recoveryTransitionIndex;
+  if (recoveryTransitionIndex === undefined && options.blockAtOrAbove) {
+    const threshold = severityOrder[options.blockAtOrAbove];
+    const index = analysis.transitions.findIndex(
+      (transition) => severityOrder[transition.severity] >= threshold,
+    );
+    recoveryTransitionIndex = index >= 0 ? index : null;
+  }
+  const breakIndex =
+    recoveryTransitionIndex === undefined
+      ? analysis.firstMutationIndex
+      : recoveryTransitionIndex;
+  const contaminatedOutputs =
+    breakIndex === null ? 0 : Math.max(0, stages.length - breakIndex - 1);
+  const firstBreakDestination = breakIndex === null ? null : breakIndex + 1;
   const graphNodes: ClaimGraphNode[] = stages.map((stage, stageIndex) => {
     let state: ClaimGraphNode["state"] = "clean";
     if (firstBreakDestination !== null) {
@@ -292,22 +320,20 @@ export function runReliabilityPipeline(
     analysis.issues
       .filter(
         (issue) =>
-          analysis.firstMutationIndex === null ||
-          issue.transitionIndex === analysis.firstMutationIndex,
+          breakIndex === null ||
+          issue.transitionIndex === breakIndex,
       )
       .map((issue) => issue.family),
   );
   const firstBreakName =
-    analysis.firstMutationIndex === null
+    breakIndex === null
       ? "no failed transition"
-      : `${stages[analysis.firstMutationIndex].label} → ${
-          stages[analysis.firstMutationIndex + 1].label
-        }`;
+      : `${stages[breakIndex].label} → ${stages[breakIndex + 1].label}`;
   const recovery = buildRecoveryPacket(
     stages,
     guardrail,
     analysis,
-    options.recoveryTransitionIndex,
+    recoveryTransitionIndex,
   );
 
   const modules: PipelineModuleResult[] = [
@@ -376,10 +402,10 @@ export function runReliabilityPipeline(
       "Calculate which descendants inherit the first failure.",
       [],
       0,
-      analysis.firstMutationIndex === null
+      breakIndex === null
         ? "No contaminated descendants."
-        : `${analysis.contaminatedOutputs} output${
-            analysis.contaminatedOutputs === 1 ? "" : "s"
+        : `${contaminatedOutputs} output${
+            contaminatedOutputs === 1 ? "" : "s"
           } at or after ${firstBreakName}.`,
       "complete",
     ),
@@ -415,9 +441,9 @@ export function runReliabilityPipeline(
     ruleFamilyAgreement: {
       active: activeFamilies.length,
       total: 3,
-      transitionIndex: analysis.firstMutationIndex,
+      transitionIndex: breakIndex,
       summary:
-        analysis.firstMutationIndex === null
+        breakIndex === null
           ? "All three rule families report a stable chain."
           : `${activeFamilies.length}/3 rule families flagged ${firstBreakName}. This is rule agreement, not a probability score.`,
     },

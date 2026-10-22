@@ -255,45 +255,73 @@ function findTermIndexes(text: string, term: string): number[] {
     .filter((index) => index >= 0);
 }
 
-function hasUncertaintyHedgeInClause(
-  text: string,
+const sentenceEndPattern = /[.!?;]/g;
+const contrastBoundaryGlobal =
+  /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b/gi;
+const uncertaintyHedgePattern =
+  /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appear|appears|appeared|suggest|suggests|suggested|seem|seems|seemed|estimated|approximately|likely|probably)\b/gi;
+
+type HedgeIndex = {
+  sentenceEnds: number[];
+  hedgeStarts: number[];
+  hedgeEnds: number[];
+  contrasts: number[];
+  commas: number[];
+};
+
+function buildHedgeIndex(text: string): HedgeIndex {
+  const positions = (pattern: RegExp) => [...text.matchAll(pattern)].map((m) => m.index ?? 0);
+  const hedges = [...text.matchAll(uncertaintyHedgePattern)];
+  return {
+    sentenceEnds: positions(sentenceEndPattern),
+    hedgeStarts: hedges.map((m) => m.index ?? 0),
+    hedgeEnds: hedges.map((m) => (m.index ?? 0) + m[0].length),
+    contrasts: positions(contrastBoundaryGlobal),
+    commas: positions(/,/g),
+  };
+}
+
+/** Whether a sorted position list has an element in [from, to). */
+function anyIn(sorted: readonly number[], from: number, to: number) {
+  const at = lowerBound(sorted, from);
+  return at < sorted.length && sorted[at] < to;
+}
+
+// Whether a hedge in the strong term's sentence qualifies it: no contrast word
+// ("but", "while", ...) between them, and, for a hedge after the term, no comma
+// (a trailing comma clause qualifies itself). Positions are found once per text;
+// rescanning the sentence for every strong term was quadratic on a long stage
+// without full stops: 38 s at 200 KB (2026-10-22 review). Only the nearest hedge
+// on each side needs checking, since a farther one has the same contrast word or
+// comma between it and the term.
+function hasIndexedHedgeInClause(
+  index: HedgeIndex,
+  textLength: number,
   strongTermIndex: number,
   strongTermLength: number,
 ) {
-  const before = text.slice(0, strongTermIndex);
-  const clauseStart =
-    Math.max(
-      before.lastIndexOf("."),
-      before.lastIndexOf("!"),
-      before.lastIndexOf("?"),
-      before.lastIndexOf(";"),
-    ) + 1;
-  const after = text.slice(strongTermIndex + strongTermLength);
-  const nextBoundary = after.search(/[.!?;]/);
-  const clauseEnd =
-    nextBoundary === -1
-      ? text.length
-      : strongTermIndex + strongTermLength + nextBoundary;
-  const clause = text.slice(clauseStart, clauseEnd);
-  const strongOffset = strongTermIndex - clauseStart;
-  const contrastBoundary =
-    /\b(?:and|but|however|although|yet|nevertheless|whereas|while)\b/i;
-  const hedgePattern =
-    /\b(?:uncertain|unconfirmed|preliminary|pending|may|might|could|possibly|possible|appear|appears|appeared|suggest|suggests|suggested|seem|seems|seemed|estimated|approximately|likely|probably)\b/gi;
-  const hedges = [...clause.matchAll(hedgePattern)];
-  for (const hedge of hedges) {
-    if (hedge.index === undefined) continue;
-    const hedgeStart = hedge.index;
-    const hedgeEnd = hedgeStart + hedge[0].length;
-    const between =
-      hedgeStart < strongOffset
-        ? clause.slice(hedgeEnd, strongOffset)
-        : clause.slice(strongOffset + strongTermLength, hedgeStart);
-    // A hedge in a trailing comma clause qualifies that clause, not the strong
-    // term: "confirmed the drug works, with possible side effects" is still an
-    // unhedged "confirmed" (2026-10-22 review).
-    if (hedgeStart > strongOffset && between.includes(",")) continue;
-    if (!contrastBoundary.test(between)) return true;
+  const strongEnd = strongTermIndex + strongTermLength;
+  const previousEnd = lowerBound(index.sentenceEnds, strongTermIndex) - 1;
+  const clauseStart = previousEnd >= 0 ? index.sentenceEnds[previousEnd] + 1 : 0;
+  const nextEnd = lowerBound(index.sentenceEnds, strongEnd);
+  const clauseEnd = nextEnd < index.sentenceEnds.length ? index.sentenceEnds[nextEnd] : textLength;
+
+  const before = lowerBound(index.hedgeStarts, strongTermIndex) - 1;
+  if (
+    before >= 0 &&
+    index.hedgeStarts[before] >= clauseStart &&
+    !anyIn(index.contrasts, index.hedgeEnds[before], strongTermIndex)
+  ) {
+    return true;
+  }
+  const after = lowerBound(index.hedgeStarts, strongEnd);
+  if (
+    after < index.hedgeStarts.length &&
+    index.hedgeEnds[after] <= clauseEnd &&
+    !anyIn(index.commas, strongEnd, index.hedgeStarts[after]) &&
+    !anyIn(index.contrasts, strongEnd, index.hedgeStarts[after])
+  ) {
+    return true;
   }
   return false;
 }
@@ -306,6 +334,7 @@ function findTerms(
   // Complete dates are blanked first so the month "May" is never read as a
   // hedge; "may 24" without a year is excluded by the digit check below.
   const normalized = normalize(extractDateClaims(text).remaining);
+  let hedgeIndex: HedgeIndex | null = null;
   return terms.filter(({ term, rank }) =>
     findTermIndexes(normalized, term).some((matchIndex) => {
       const prefix = normalized.slice(Math.max(0, matchIndex - 24), matchIndex);
@@ -320,7 +349,12 @@ function findTerms(
       if (
         scopeStrongTermsWithUncertainty &&
         rank >= 2 &&
-        hasUncertaintyHedgeInClause(normalized, matchIndex, term.length)
+        hasIndexedHedgeInClause(
+          (hedgeIndex ??= buildHedgeIndex(normalized)),
+          normalized.length,
+          matchIndex,
+          term.length,
+        )
       ) {
         return false;
       }
@@ -722,24 +756,52 @@ type CompletedActionContext = {
   label: string;
 };
 
+// Boundary positions are found once per text and pattern. clauseAround used
+// to rescan from the start of the text for every action verb, which made a
+// long stage of repeated verbs quadratic: 93 s at 400 KB (2026-10-22 review).
+const boundaryCache = new Map<RegExp, { text: string; starts: number[]; ends: number[] }>();
+
+function boundaryPositions(text: string, boundary: RegExp) {
+  const cached = boundaryCache.get(boundary);
+  if (cached && cached.text === text) return cached;
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (const match of text.matchAll(boundary)) {
+    starts.push(match.index ?? 0);
+    ends.push((match.index ?? 0) + match[0].length);
+  }
+  const positions = { text, starts, ends };
+  boundaryCache.set(boundary, positions);
+  return positions;
+}
+
+/** Index of the first element >= value in a sorted array (its length if none). */
+function lowerBound(sorted: readonly number[], value: number) {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (sorted[middle] < value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 function clauseAround(
   text: string,
   index: number,
   length: number,
   boundary: RegExp,
 ) {
-  let start = 0;
-  let end = text.length;
-  for (const match of text.matchAll(boundary)) {
-    const matchIndex = match.index ?? 0;
-    if (matchIndex + match[0].length <= index) {
-      start = matchIndex + match[0].length;
-    } else if (matchIndex >= index + length) {
-      end = matchIndex;
-      break;
-    }
-  }
-  return { start, end };
+  const { starts, ends } = boundaryPositions(text, boundary);
+  // The last boundary that ends at or before the term, and the first that
+  // starts at or after its end; a boundary overlapping the term is skipped.
+  const before = lowerBound(ends, index + 1) - 1;
+  const after = lowerBound(starts, index + length);
+  return {
+    start: before >= 0 ? ends[before] : 0,
+    end: after < starts.length ? starts[after] : text.length,
+  };
 }
 
 function isAgentiveCompletedAction(

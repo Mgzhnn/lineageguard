@@ -126,3 +126,95 @@ test("a merge node's own text is checked against the guardrail", () => {
   assert.ok(run.edges.some((edge) =>
     edge.issues.some((issue) => issue.title === "Protected action appears completed")));
 });
+
+// Group 2: engine cost, API decision, stage ids and failed logins.
+import { runReliabilityPipeline } from "../lib/pipeline.ts";
+import { parseTracePayload } from "../lib/trace-schema.ts";
+import { authorizeEvaluationRequest, resetEvaluationRateLimits } from "../lib/api-security.ts";
+
+test("a long stage of strong terms and hedges stays linear", () => {
+  const started = performance.now();
+  runReliabilityPipeline(
+    [
+      { id: "a", label: "A", text: "Summary." },
+      { id: "b", label: "B", text: "may confirmed ".repeat(15_000) },
+    ],
+    "",
+  );
+  assert.ok(performance.now() - started < 3_000, "200 KB of 'may confirmed' took too long");
+});
+
+test("a long stage of action verbs under a guardrail stays linear", () => {
+  const started = performance.now();
+  runReliabilityPipeline(
+    [
+      { id: "a", label: "A", text: "Draft the email." },
+      { id: "b", label: "B", text: "sent. ".repeat(60_000) },
+    ],
+    "Do not send email.",
+  );
+  assert.ok(performance.now() - started < 3_000, "360 KB of 'sent.' took too long");
+});
+
+test("with a blocking threshold the report's first break is the blocking transition", () => {
+  const report = runReliabilityPipeline(
+    [
+      { id: "source", label: "Source", text: "The pilot suggests the tool may help some teams." },
+      { id: "research", label: "Research", text: "The pilot suggests the tool may help some teams. It will ship next week." },
+      { id: "summary", label: "Summary", text: "The pilot proves the tool helps all teams. It will ship next week." },
+    ],
+    "",
+    { blockAtOrAbove: "high" },
+  );
+  const blocking = report.analysis.transitions.findIndex((transition) => transition.severity === "high");
+  assert.ok(blocking > 0, "the test needs a below-threshold issue before the blocking one");
+  assert.equal(report.ruleFamilyAgreement.transitionIndex, blocking);
+  assert.equal(report.graph.nodes[blocking + 1].state, "first-break");
+  assert.equal(report.graph.nodes[blocking].state, "verified");
+});
+
+test("generated stage ids never take an id the caller chose", () => {
+  const parsed = parseTracePayload({
+    stages: [
+      { label: "First", text: "A claim." },
+      { id: "stage-1", label: "Second", text: "A claim." },
+    ],
+  });
+  assert.deepEqual(new Set(parsed.stages.map((stage) => stage.id)).size, 2);
+  assert.equal(parsed.stages[1].id, "stage-1");
+});
+
+test("failed logins are rate-limited too", () => {
+  const original = process.env.LINEAGEGUARD_API_KEYS_JSON;
+  process.env.LINEAGEGUARD_API_KEYS_JSON = JSON.stringify({ "tenant-a": "strong-secret" });
+  try {
+    resetEvaluationRateLimits();
+    const attempt = (token: string) => authorizeEvaluationRequest(
+      new Request("https://public.example/api/evaluate", {
+        headers: { authorization: `Bearer ${token}`, "x-lineageguard-tenant": "tenant-a" },
+      }),
+    );
+    const statuses = Array.from({ length: 12 }, (_, i) => {
+      const access = attempt(`guess-${i}`);
+      return access.ok ? 200 : access.status;
+    });
+    assert.deepEqual(statuses.slice(0, 10), Array(10).fill(401));
+    assert.equal(statuses[10], 429);
+  } finally {
+    resetEvaluationRateLimits();
+    if (original === undefined) delete process.env.LINEAGEGUARD_API_KEYS_JSON;
+    else process.env.LINEAGEGUARD_API_KEYS_JSON = original;
+  }
+});
+
+test("a deduplicated 128-character agent id still fits the id limit", () => {
+  const agentId = "a".repeat(128);
+  const parsed = parseTracePayload({
+    events: [
+      { type: "source", sequence: 0, agentId, agentName: "Source", content: "A claim.", timestamp: "2026-10-22T00:00:00Z" },
+      { type: "handoff", sequence: 1, agentId, agentName: "Same agent", content: "A claim.", timestamp: "2026-10-22T00:00:01Z" },
+    ],
+  });
+  assert.ok(parsed.stages.every((stage) => stage.id.length <= 128));
+  assert.doesNotThrow(() => parseTracePayload({ stages: parsed.stages }));
+});

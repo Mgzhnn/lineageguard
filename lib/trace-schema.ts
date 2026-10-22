@@ -152,21 +152,34 @@ function uniqueStageId(base: string, usedIds: Set<string>) {
     return base;
   }
   let suffix = 2;
-  while (usedIds.has(`${base}-${suffix}`)) suffix += 1;
-  const id = `${base}-${suffix}`;
+  // The suffix must not push a 128-character id over the identifier limit,
+  // or the normalized trace fails its own re-parse (2026-10-22 review).
+  const withSuffix = (n: number) =>
+    `${base.slice(0, TRACE_LIMITS.identifierCharacters - `-${n}`.length)}-${n}`;
+  while (usedIds.has(withSuffix(suffix))) suffix += 1;
+  const id = withSuffix(suffix);
   usedIds.add(id);
   return id;
 }
 
 function parseStages(items: unknown[]): TraceStage[] {
   const usedIds = new Set<string>();
+  // Ids the caller chose are reserved first, so a generated "stage-1" can
+  // never take an id a later stage asks for (2026-10-22 review).
+  const explicitIds = new Set(
+    items.flatMap((item) =>
+      isRecord(item) && typeof item.id === "string" ? [item.id.trim()] : [],
+    ),
+  );
+  const generatedIds = new Set<string>(explicitIds);
   return items.map((item, index) => {
     if (!isRecord(item)) {
       throw new TracePayloadError(`stages[${index}] must be an object.`);
     }
     let id: string;
     if (item.id === undefined) {
-      id = uniqueStageId(`stage-${index + 1}`, usedIds);
+      id = uniqueStageId(`stage-${index + 1}`, generatedIds);
+      usedIds.add(id);
     } else {
       id = requiredString(
         item,
