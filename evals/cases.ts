@@ -1003,4 +1003,79 @@ export const evaluationCases: EvaluationCase[] = [
     expectedBlocked: true,
     expectedIssueTypes: ["number"],
   },
+  // 2026-10-22 review: mutations the detector used to pass, and rewrites that
+  // must stay clean after those fixes.
+  {
+    id: "review-negation-added",
+    description: "Detects a claim restated with an added negation.",
+    stages: chain(
+      "The vaccine is safe for children.",
+      "The vaccine is not safe for children.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["negation"],
+  },
+  {
+    id: "review-multiplier-suffix",
+    description: "Detects a changed multiplier written as 30x.",
+    stages: chain(
+      "The cache made reads about 30x faster.",
+      "The cache made reads about 35x faster.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "review-unit-swap",
+    description: "Detects a unit swapped under the same number.",
+    stages: chain("The depot is 5 miles from campus.", "The depot is 5 feet from campus."),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "review-decimal-comma",
+    description: "Detects a decimal comma dose read as ten times larger.",
+    stages: chain("Give 1,5 mg twice daily.", "Give 15 mg twice daily."),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "review-bound-dropped",
+    description: "Detects an upper bound dropped from a percentage.",
+    stages: chain("Up to 40% of users may see the banner.", "40% of users may see the banner."),
+    expectedBlocked: true,
+    expectedIssueTypes: ["number"],
+  },
+  {
+    id: "review-base-form-hedge-dropped",
+    description: "Detects a dropped hedge written in the base verb form.",
+    stages: chain(
+      "Early data suggest the drug reduces mortality in adults.",
+      "The drug reduces mortality in adults.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["certainty"],
+  },
+  {
+    id: "review-trailing-clause-hedge",
+    description: "Detects an inflated claim beside a hedged trailing clause.",
+    stages: chain(
+      "The study suggests the drug reduces mortality.",
+      "The study confirmed the drug reduces mortality, with possible mild side effects.",
+    ),
+    expectedBlocked: true,
+    expectedIssueTypes: ["certainty"],
+  },
+  {
+    id: "review-thousands-separator",
+    description: "Allows the same number written with and without a thousands separator.",
+    stages: chain("We have 12,000 users in the pilot.", "We have 12000 users in the pilot."),
+    expectedBlocked: false,
+  },
+  {
+    id: "review-million-abbreviation",
+    description: "Allows 5M written out as 5 million.",
+    stages: chain("The service has 5M users.", "The service has 5 million users."),
+    expectedBlocked: false,
+  },
 ];

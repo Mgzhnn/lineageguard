@@ -369,6 +369,15 @@ export function runReliabilityGraphPipeline(
         nodeById.get(parentId)!.text.length +
         comparedTextFor(node, parentId).length;
     }
+    // The guardrail check on a fully projected node's own text (below) is a
+    // comparison too, and counts against the same budget.
+    if (
+      guardrail.trim() &&
+      node.parentIds.length &&
+      node.parentIds.every((parentId) => comparedTextFor(node, parentId) !== node.text)
+    ) {
+      comparisonCharacters += nodeById.get(node.parentIds[0])!.text.length + node.text.length;
+    }
   }
   if (edgeCount > TRACE_LIMITS.graphEdges) {
     throw new TracePayloadError(
@@ -419,6 +428,43 @@ export function runReliabilityGraphPipeline(
         severity: highestSeverity(issues),
         issues,
       });
+    }
+    // With a projection on every parent link the node's own text was never
+    // analysed, so "I emailed all customers" in a merge node passed the
+    // guardrail (2026-10-22 review). Run the authority check on the full text
+    // once per node and attach its findings to the node's first edge.
+    const projected = node.parentIds.filter(
+      (parentId) => comparedTextFor(node, parentId) !== node.text,
+    );
+    if (guardrail.trim() && projected.length === node.parentIds.length && projected.length) {
+      const firstParent = nodeById.get(node.parentIds[0])!;
+      const edgeIndex = edges.findIndex((edge) => edge.to === node.id);
+      const edge = edges[edgeIndex];
+      const own = analyzeLineage(
+        [firstParent, { id: node.id, label: node.label, text: node.text }],
+        guardrail,
+        { rules: options.rules },
+      ).issues.filter(
+        (issue) =>
+          issue.type === "guardrail" &&
+          !edge.issues.some((seen) => seen.title === issue.title),
+      );
+      if (own.length) {
+        edge.issues.push(
+          ...own.map(
+            (issue): GraphLineageIssue => ({
+              ...issue,
+              id: `${edge.id}:own:${issue.id}`,
+              transitionIndex: edgeIndex,
+              edgeId: edge.id,
+              edgeIndex,
+              fromStageId: firstParent.id,
+              toStageId: node.id,
+            }),
+          ),
+        );
+        edge.severity = highestSeverity(edge.issues);
+      }
     }
   }
   if (!edges.length) {
