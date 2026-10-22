@@ -415,8 +415,8 @@ pnpm build
 pnpm test:render
 ```
 
-The current `curated-regression-v2` set contains 77 cases at the medium
-threshold: 54 deliberately small positive and negative English cases, including
+The current `curated-regression-v2` set contains 86 cases at the medium
+threshold: 63 deliberately small positive and negative English cases, including
 equivalence rewrites that must stay clean (contractions, `between X and Y`,
 currency words, the month May) and structural mutations that must block
 (including a hedge, quantifier or negation that is silently dropped from a
@@ -430,12 +430,11 @@ fail the gate, which is the 0.9 minimums below.
 
 | Metric | Result |
 | --- | --- |
-| Precision | 94.7% |
+| Precision | 95.6% |
 | Recall | 100% |
-| Specificity | 95.1% |
+| Specificity | 95.3% |
 | Expected-signal coverage | 100% |
-| False-positive rate | 4.9% |
-| False-positive rate | 0% |
+| False-positive rate | 4.7% |
 
 These are regression-set results at the medium threshold, **not** a claim
 about unseen production traffic. Add real anonymized traces as integrations
@@ -489,9 +488,10 @@ LineageGuard is a smoke detector, not a truth machine. It catches explicit
 structural mutations but can miss subtle paraphrases, sarcasm, and a false
 claim that remains unchanged. It can also warn on a harmless rewrite. The
 built-in meaning and authority lexicons cover English. The coverage heuristic
-flags stages with at least 20 letters when fewer than 30% are in its Latin-script
-range; it does not identify every unsupported language or short phrase. Numeric
-checks still run. Use a semantic judge or domain rule for broader language review.
+flags a stage, or the guardrail, with at least 8 letters when fewer than 30% are
+in its Latin-script range, or when at least 6 words contain fewer than 8%
+common English function words; it does not identify every unsupported language
+or short phrase. Numeric checks still run. Use a semantic judge or domain rule for broader language review.
 Number canonicalization interprets bare `k` and currency-prefixed `m`/`b`
 magnitudes, complete dates, and common metric units; ambiguous partial forms
 stay literal. Domain teams can add inspectable `CustomLineageRule` extensions
@@ -527,7 +527,8 @@ lib/
   trace-schema.ts        Generic JSON validation and normalization
 sdk/
   index.ts               Runtime instrumentation API
-  runtime.ts             Agent, handoff, tool, and recovery supervisor
+  runtime.ts             Public entry for the runtime/ supervisor
+  runtime/               Session (agents, handoffs, recovery), tool gate, snapshots
   graph.ts               DAG builder API
   otel.ts                OTLP/JSON GenAI trace adapter
   package.json           Publishable lineageguard manifest

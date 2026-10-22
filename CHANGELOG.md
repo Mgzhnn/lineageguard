@@ -2,6 +2,36 @@
 
 All notable changes to LineageGuard are documented here.
 
+## Unreleased
+
+From the 2026-10-22 review (see `docs/BACKLOG.md`):
+
+- Detector: an added negation that flips a claim is high; numbers keep
+  attached units and suffixes (`30x`, `40ms`, `64GB`, `12th`, `5°C`) and
+  common spelled units; only thousands commas are stripped (`1,5 mg` is
+  1.5 mg); bounds such as "up to" stay with their number; base verb forms,
+  `seem`/`appear`, `show`/`prove` and `probably` are hedge words, and a
+  dropped rank-1 hedge is reported; a hedge in a trailing comma clause no
+  longer excuses an inflated claim; text is NFKC-normalized with format
+  characters removed; a protected action after a dropped guardrail is still
+  found; a guardrail outside language coverage is reported; a merge node's
+  own text is checked against the guardrail.
+- Engine and API: hedge and guardrail scans are linear (a 200 KB stage went
+  from 38 s to under 0.1 s); `runReliabilityPipeline` takes
+  `blockAtOrAbove` and the report follows that decision; the evaluate route
+  runs the pipeline once; generated stage ids avoid caller ids and stay
+  within the id limit; failed logins are rate-limited.
+- SDK: OTel keeps a model's JSON answer whole and no longer overflows on
+  deeply nested JSON; new `toolExecutionStore` option saves the consumed
+  approval and pending idempotency record before a side-effect tool runs;
+  an agent's tool client stops working when its run ends; source maps embed
+  their sources.
+- Release: the publish workflow verifies and packs in a job without OIDC
+  and publishes that exact tarball from a separate job with npm pinned.
+- Site: label contrast, a focus outline on the trace import, always-present
+  status regions, replay button names, unique new stage ids, and a
+  1200×630 `og.png`.
+
 ## 0.9.0
 
 - SDK: add `semanticJudgeTimeoutMs` (default 30 s) and
