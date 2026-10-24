@@ -16,5 +16,8 @@ approval tokens from a real service, or user trace content were used.
 - `benchmark-before.jsonl`, `benchmark-after.jsonl`: local single-run smoke timings.
 - `SHA256SUMS`: SHA-256 digests of the raw logs and measurements in this directory.
 
-Read [AUDIT.md](../../../AUDIT.md) for implications and validation boundaries and
-[IMPLEMENTATION_PROMPT.md](../../../IMPLEMENTATION_PROMPT.md) for the requested fixes.
+Read [AUDIT.md](../../../AUDIT.md) for implications and validation boundaries.
+
+On 2026-10-24 the absolute local paths in `regressions-before.log` and
+`production-regressions-before.log` were replaced by `<repo>/`, and `SHA256SUMS`
+was regenerated for those two files. Nothing else in the logs changed.

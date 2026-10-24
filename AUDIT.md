@@ -2,8 +2,7 @@
 
 ## Evidence and scope
 
-Baseline: server `sail-gpu`, `/home/magzhan/projects/lineageguard`, branch `main`,
-commit `1882d72`. The existing README has encoding damage **and** a real wording
+Baseline: branch `main`, commit `1882d72`. The existing README has encoding damage **and** a real wording
 edit from “model-independent” to “model-optional”. It must not be reset wholesale.
 The SDK manifest is version 0.7.0 and has no runtime dependencies; publication
 status was not inferred from that manifest. Production configuration and live
@@ -12,14 +11,12 @@ traffic were not inspected. Tests use synthetic local fixtures, never real token
 The review covers the API, schema adapters, graph and chain engines, runtime,
 package/build/release scripts, existing tests/evals, and frontend state handling.
 This is a source and executable regression audit, not a penetration test of the
-public service or a claim of exhaustive language understanding. The old audit
-prompt is retained as context, not treated as verified fact.
+public service or a claim of exhaustive language understanding.
 
 The shareable raw evidence is committed under
 [`docs/audit-evidence/2026-09-05/`](./docs/audit-evidence/2026-09-05/README.md).
-Additional installation/retry logs and the original README backup are retained
-in the local review `../evidence/` directory and
-`/home/magzhan/projects/lineageguard-review-2026-09-05/evidence/` on the server.
+Additional installation/retry logs and the original README backup are kept
+outside the repository.
 `baseline-install.log`: locked installation passed on Node 22.23.2 / pnpm 11.9.0.
 `baseline-verify.log`: full verification exited 0. Curated eval: 33 cases, precision,
 recall, specificity, and expected issue coverage all 1.0, no failures.
@@ -29,8 +26,7 @@ existing ignored image-size advisories and four unignored fast-uri advisories.
 
 ## Findings before implementation
 
-Line references below refer to baseline `1882d72`. Each acceptance requirement
-appears in `IMPLEMENTATION_PROMPT.md`. All findings below have been addressed; see the final status table and validation limits.
+Line references below refer to baseline `1882d72`. All findings below have been addressed; see the final status table and validation limits.
 
 | ID | Severity | Evidence / concrete failure | Required change |
 | --- | --- | --- | --- |
@@ -138,7 +134,7 @@ or disabled. `CHANGELOG.md` records these changes under Unreleased.
 | AUD-16 | FIXED | Recovery and coverage claims corrected; both README JS quickstarts executed against the tarball. |
 | AUD-17 | FIXED | Compiled page ignores hostile forwarded origin headers in the production render test. |
 
-These changes are delivered together on `codex/lineageguard-audit-2026-09-05`.
+These changes were delivered together on one audit branch.
 The verified source revision is
 [`c4202894e00258ae8fa98b5e3a2f825d8e123ece`](https://github.com/Mgzhnn/lineageguard/commit/c4202894e00258ae8fa98b5e3a2f825d8e123ece).
 The subsequent evidence commit contains this report and the raw logs, with a
@@ -146,7 +142,7 @@ SHA-256 manifest for the evidence files. There is no npm release or website depl
 
 ## Final verification results
 
-The final `pnpm verify` exited **0** on sail-gpu / Node **22.23.2** / pnpm **11.9.0**.
+The final `pnpm verify` exited **0** on Node **22.23.2** / pnpm **11.9.0**.
 The complete output is [final-verify.log](./docs/audit-evidence/2026-09-05/final-verify.log).
 It includes lint, TypeScript checks, the production Worker build, examples and:
 
