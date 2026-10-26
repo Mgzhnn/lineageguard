@@ -46,8 +46,8 @@
   },
   "dependencies": {
     "next": "16.4.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.52.1",
@@ -59,7 +59,7 @@
     "@vitejs/plugin-rsc": "0.5.38",
     "eslint": "9.39.4",
     "eslint-config-next": "16.4.2",
-    "react-server-dom-webpack": "19.3.0",
+    "react-server-dom-webpack": "19.3.1",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vinext": "1.0.1",
